@@ -10,12 +10,18 @@ interface BarData {
   volume: number;
 }
 
+// Helper function to convert timestamp to EST timezone
+function convertToESTTimestamp(timestamp: string | Date): number {
+  const date = new Date(timestamp);
+  return Math.floor((date.getTime() - date.getTimezoneOffset() * 60 * 1000) / 1000);
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const symbol = searchParams.get("symbol");
   const type = searchParams.get("type") || "stock"; // "stock" or "crypto"
   const timeframe = searchParams.get("timeframe") || "1Min";
-  const limit = parseInt(searchParams.get("limit") || "2000"); // Reduced limit for better performance
+  const limit = parseInt(searchParams.get("limit") || "10000"); // Reduced limit for better performance
   const startParam = searchParams.get("start");
   const endParam = searchParams.get("end");
 
@@ -85,7 +91,7 @@ export async function GET(request: NextRequest) {
 
     if (type === "crypto") {
       // Use getCryptoBars for crypto symbols
-      console.log(`📊 Fetching crypto bars for ${symbol} from ${startDate.toISOString()} to ${endDate.toISOString()}`);
+      console.log(`📊 Fetching crypto bars for ${symbol} from ${startDate.toLocaleString()} to ${endDate.toLocaleString()}`);
       
       const barsResponse = await alpaca.getCryptoBars([symbol.toUpperCase()], {
         start: startDate,
@@ -99,7 +105,7 @@ export async function GET(request: NextRequest) {
         if (bars && Array.isArray(bars)) {
           for (const bar of bars) {
             const processedBar = {
-              time: Math.floor(new Date(bar.Timestamp).getTime() / 1000),
+              time: convertToESTTimestamp(bar.Timestamp),
               open: bar.Open,
               high: bar.High,
               low: bar.Low,
@@ -112,8 +118,8 @@ export async function GET(request: NextRequest) {
           
           // Log first and last bars for debugging
           if (bars.length > 0) {
-            console.log(`📅 First bar timestamp: ${bars[0].Timestamp} (${new Date(bars[0].Timestamp).toISOString()})`);
-            console.log(`📅 Last bar timestamp: ${bars[bars.length - 1].Timestamp} (${new Date(bars[bars.length - 1].Timestamp).toISOString()})`);
+            console.log(`📅 First bar timestamp: ${bars[0].Timestamp} (${new Date(bars[0].Timestamp).toLocaleString()})`);
+            console.log(`📅 Last bar timestamp: ${bars[bars.length - 1].Timestamp} (${new Date(bars[bars.length - 1].Timestamp).toLocaleString()})`);
           }
         }
       }
@@ -134,7 +140,7 @@ export async function GET(request: NextRequest) {
         let batchCount = 0;
         for await (const bar of barsResponse) {
           const processedBar = {
-            time: Math.floor(new Date(bar.Timestamp).getTime() / 1000),
+            time: convertToESTTimestamp(bar.Timestamp),
             open: bar.OpenPrice,
             high: bar.HighPrice,
             low: bar.LowPrice,
@@ -164,7 +170,7 @@ export async function GET(request: NextRequest) {
     const sortedData = historicalData.sort((a, b) => a.time - b.time);
 
     console.log(
-      `📊 Retrieved ${sortedData.length} historical bars for ${symbol} (${startDate.toISOString()} to ${endDate.toISOString()})`,
+      `📊 Retrieved ${sortedData.length} historical bars for ${symbol} (${startDate.toLocaleString()} to ${endDate.toLocaleString()})`,
     );
 
     return NextResponse.json({
@@ -177,10 +183,10 @@ export async function GET(request: NextRequest) {
         dateRange:
           sortedData.length > 0
             ? {
-                start: new Date(sortedData[0].time * 1000).toISOString(),
+                start: new Date(sortedData[0].time * 1000).toLocaleString(),
                 end: new Date(
                   sortedData[sortedData.length - 1].time * 1000,
-                ).toISOString(),
+                ).toLocaleString(),
               }
             : null,
       },

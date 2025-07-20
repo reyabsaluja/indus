@@ -18,6 +18,12 @@ interface WebSocketMessage {
 
 type DataCallback = (data: any) => void;
 
+// Helper function to convert timestamp to EST timezone (same as alpaca route)
+function convertToESTTimestamp(timestamp: string | Date): number {
+  const date = new Date(timestamp);
+  return Math.floor((date.getTime() - date.getTimezoneOffset() * 60 * 1000) / 1000);
+}
+
 let socketServer: any; // We'll inject this from /api/socket
 
 export function setSocketServer(io: any) {
@@ -222,7 +228,7 @@ export class AlpacaService {
     if (!this.dataCallbacks.has(symbol)) return;
 
     const candlestickData = {
-      time: Math.floor(new Date(trade.timestamp).getTime() / 1000),
+      time: convertToESTTimestamp(trade.timestamp),
       open: trade.open || trade.price,
       high: trade.high || trade.price,
       low: trade.low || trade.price,
@@ -244,7 +250,7 @@ export class AlpacaService {
     if (!this.dataCallbacks.has(symbol)) return;
 
     const candlestickData = {
-      time: Math.floor(new Date(bar.timestamp).getTime() / 1000),
+      time: convertToESTTimestamp(bar.timestamp),
       open: bar.open,
       high: bar.high,
       low: bar.low,
@@ -272,7 +278,7 @@ export class AlpacaService {
     }
 
     const candlestickData = {
-      time: Math.floor(new Date(bar.Timestamp || bar.timestamp).getTime() / 1000),
+      time: convertToESTTimestamp(bar.Timestamp || bar.timestamp),
       open: bar.Open || bar.open,
       high: bar.High || bar.high,
       low: bar.Low || bar.low,
