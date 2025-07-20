@@ -20,6 +20,32 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Indus",
   description: "AI-powered stock trading dashboard",
+  icons: {
+    icon: "/favicon.ico",
+  },
+  openGraph: {
+    title: "Indus",
+    description: "AI-powered stock trading dashboard",
+    url: "https://indus-trade.vercel.app", // replace with actual URL
+    siteName: "Indus",
+    images: [
+      {
+        url: "https://indus-trade.vercel.app", // replace with your image URL
+        width: 1200,
+        height: 630,
+        alt: "Indus Dashboard",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Indus",
+    description: "AI-powered stock trading dashboard",
+    images: ["https://indus-trade.vercel.app/og-image.png"], // same image or another
+    creator: "@reyabsaluja"  // optional
+  },
 };
 
 export default async function RootLayout({
