@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     siteName: "Indus",
     images: [
       {
-        url: "https://indus-trade.vercel.app", // replace with your image URL
+        url: "https://indus-trade.vercel.app/og-image.png", // replace with your image URL
         width: 1200,
         height: 630,
         alt: "Indus Dashboard",
