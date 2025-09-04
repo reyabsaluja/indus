@@ -1,50 +1,66 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Indus - AI-Powered Financial Intelligence Platform
 
-## Getting Started
+Indus is an intelligent financial analysis platform that provides comprehensive stock market data, real-time charts, and AI-powered insights to help investors make informed decisions. Built with Next.js, TypeScript, socket.io, Alpaca API, Yahoo Finance, Google Gemini, and TradingView.
 
-First, run the development server:
+## 🌟 Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+### 📊 Comprehensive Financial Analytics
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+-   **Real-time Stock Data**: Live prices, market data, and financial metrics via Yahoo Finance and Alpaca APIs
+-   **Interactive Charts**: Professional trading charts powered by TradingView's Lightweight Charts
+-   **50+ Financial Metrics**: Valuation ratios, margins, growth rates, financial health indicators, and more
+-   **Cryptocurrency Support**: Track popular cryptocurrencies alongside traditional stocks
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 🤖 AI-Powered Intelligence
 
-## AI Explanations Setup
+-   **Context-Aware Explanations**: Hover over any metric to get intelligent explanations powered by Google's Gemini AI
+-   **Interactive Chat**: Click on any metric to open an AI chat panel for deeper analysis
+-   **Educational Content**: Built-in definitions and explanations for all financial terms
+-   **Streaming Responses**: Real-time AI responses with proper context understanding
 
-This app uses Google's Gemini AI to provide explanations for stock metrics. To enable AI-powered explanations:
+### 🔍 Advanced Search & Discovery
 
-1. Get a free API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
-2. Create a `.env.local` file in the project root
-3. Add your API key: `GEMINI_API_KEY=your_api_key_here`
+-   **Universal Search**: Find any publicly traded company or cryptocurrency
+-   **Categorized Browsing**: Explore stocks by sector (Tech, Finance, Healthcare, Energy, etc.)
+-   **Trending Stocks**: Discover trending and popular investments
+-   **Favorites System**: Save and track your favorite companies
 
-## Features
+### 👤 User Management
 
-- **Stock Table**: Displays stock data with hoverable explanations
-- **AI Explanations**: Hover over any number to see an AI-generated explanation
-- **Batch Loading**: Explanations are preloaded for better performance
+-   **Supabase Authentication**: Secure login with email/password or Google OAuth
+-   **Personal Dashboard**: Customized experience with saved favorites
+-   **Session Management**: Persistent login state across devices
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 📱 Modern User Experience
 
-## Learn More
+-   **Responsive Design**: Beautiful interface that works on all devices
+-   **Dark Theme**: Professional dark theme optimized for financial analysis
+-   **Real-time Updates**: Live data updates and streaming AI responses
+-   **Intuitive Navigation**: Clean, modern sidebar navigation with breadcrumbs
 
-To learn more about Next.js, take a look at the following resources:
+## 🛠️ Tech Stack
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Frontend
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+-   **Next.js** - React framework with App Router
+-   **TypeScript** - Type safety and better developer experience
+-   **Tailwind CSS** - Utility-first CSS framework
+-   **Radix UI** - Accessible component primitives
+-   **Lucide React** - Beautiful icon library
 
-## Deploy on Vercel
+### Backend & Data
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+-   **Yahoo Finance** - Stock market data and financial metrics
+-   **Alpaca Trade API** - Real-time market data and historical charts
+-   **Google Gemini AI** - AI-powered explanations and chat
+-   **Supabase** - Authentication and user management
+-   **Vercel** - Cloud platform for deployment and hosting
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Charts & Visualization
+
+-   **TradingView Lightweight Charts** - Professional financial charts
+-   **Real-time Data Streaming** - Live market data updates
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
