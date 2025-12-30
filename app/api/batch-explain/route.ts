@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { makeBatchPrompt, Item } from "@/lib/prompts";
 import { VALUE_ANALYSIS_SYSTEM_PROMPT } from "@/lib/system-prompts";
 
+// UPDATED: Using gemini-2.5-flash which is the current stable release (June 2025)
 const GEMINI_API_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
 export async function POST(req: Request) {
   try {
@@ -24,11 +25,11 @@ export async function POST(req: Request) {
     const prompt = makeBatchPrompt(items);
     const fullPrompt = `${VALUE_ANALYSIS_SYSTEM_PROMPT}\n\n${prompt}`;
 
-    const res = await fetch(GEMINI_API_URL, {
+    // UPDATED: Passing key in URL and using the updated model URL
+    const res = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-goog-api-key": apiKey,
       },
       body: JSON.stringify({
         contents: [{ parts: [{ text: fullPrompt }] }],
@@ -42,6 +43,15 @@ export async function POST(req: Request) {
         errorText,
         headers: Object.fromEntries(res.headers.entries()),
       });
+
+      // UPDATED: Return 429 explicitly if quota is hit
+      if (res.status === 429) {
+        return NextResponse.json(
+          { error: "Gemini API Rate Limit Exceeded. Please try again later." },
+          { status: 429 },
+        );
+      }
+
       return NextResponse.json(
         { error: `Gemini error: ${res.status}` },
         { status: 502 },
