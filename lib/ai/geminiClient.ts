@@ -21,7 +21,7 @@ export class GeminiClient {
   }
 
   async generateStreamingContent(messages: GeminiMessage[]): Promise<ReadableStream<Uint8Array>> {
-    const model = 'gemini-1.5-flash';
+    const model = 'gemini-2.5-flash';
     const url = `${this.baseUrl}/models/${model}:streamGenerateContent?key=${this.apiKey}`;
 
     // Convert system message to user message for Gemini (it doesn't have system role)
@@ -80,7 +80,7 @@ export class GeminiClient {
   }
 
   async generateContent(messages: GeminiMessage[]): Promise<string> {
-    const model = 'gemini-1.5-flash';
+    const model = 'gemini-2.5-flash';
     const url = `${this.baseUrl}/models/${model}:generateContent?key=${this.apiKey}`;
 
     // Convert system message to user message for Gemini
