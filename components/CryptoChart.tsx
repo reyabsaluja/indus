@@ -116,6 +116,7 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 				const earliestTime = sortedData.length > 0 ? sortedData[0].time : null;
 				setEarliestLoadedDate(earliestTime);
 				earliestLoadedDateRef.current = earliestTime;
+
 				addDebugInfo(`Set earliestLoadedDate to: ${earliestTime} (first bar time: ${sortedData[0]?.time})`);
 
 				// Show detailed info about the data loaded
@@ -322,17 +323,6 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 	useEffect(() => {
 		addDebugInfo("Initializing socket connection...");
 
-		// Connect to the socket endpoint
-		fetch("/api/socket")
-			.then(() => {
-				addDebugInfo("Socket endpoint initialized");
-			})
-			.catch((err) => {
-				addDebugInfo(`Socket endpoint error: ${err.message}`);
-				setError(`Failed to initialize socket endpoint: ${err.message}`);
-				setWebsocketEnabled(false);
-			});
-
 		// Only try to connect to socket.io if websocket is enabled
 		if (!websocketEnabled) {
 			addDebugInfo("WebSocket disabled due to configuration issues");
@@ -340,64 +330,79 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 			return;
 		}
 
-		socket = io({
-			path: "/api/socket_io",
-			transports: ["websocket", "polling"],
-			timeout: 10000,
-		});
+		// Connect to the socket endpoint first to initialize the server
+		fetch("/api/socket")
+			.then(() => {
+				addDebugInfo("Socket endpoint initialized");
 
-		// Connection events
-		socket.on("connect", () => {
-			addDebugInfo("✅ Connected to socket.io");
-			setConnectionStatus("connected");
-			setError(null);
-		});
+				// Now connect to socket.io after the server is initialized
+				socket = io({
+					path: "/api/socket_io",
+					transports: ["websocket", "polling"],
+					timeout: 10000,
+					reconnection: true,
+					reconnectionAttempts: 5,
+					reconnectionDelay: 1000,
+				});
 
-		socket.on("disconnect", (reason: string) => {
-			addDebugInfo(`❌ Disconnected from socket.io: ${reason}`);
-			setConnectionStatus("disconnected");
-		});
+				// Connection events
+				socket.on("connect", () => {
+					addDebugInfo("✅ Connected to socket.io");
+					setConnectionStatus("connected");
+					setError(null);
+				});
 
-		socket.on("connect_error", (err: any) => {
-			addDebugInfo(`🔴 Connection error: ${err.message}`);
-			setError(null); // Don't show connection errors as user errors
-			setConnectionStatus("error");
-			setWebsocketEnabled(false);
-		});
+				socket.on("disconnect", (reason: string) => {
+					addDebugInfo(`❌ Disconnected from socket.io: ${reason}`);
+					setConnectionStatus("disconnected");
+				});
 
-		socket.on("error", (err: any) => {
-			addDebugInfo(`🔴 Socket error: ${err.message}`);
-			// Don't show socket errors as user errors - they're configuration issues
-			setConnectionStatus("error");
-		});
+				socket.on("connect_error", (err: any) => {
+					addDebugInfo(`🔴 Connection error: ${err.message}`);
+					setError(null); // Don't show connection errors as user errors
+					setConnectionStatus("error");
+					setWebsocketEnabled(false);
+				});
 
-		// Data events - listen for crypto_bar instead of stock_bar
-		socket.on("crypto_bar", (data: any) => {
-			addDebugInfo(`📊 Received crypto_bar data: ${JSON.stringify(data)}`);
-			// Only update chart with live data if timeframe is 1Min
-			if (candlestickSeriesRef.current && selectedTimeframeRef.current === "1Min") {
-				// Update the chart with live data
-				candlestickSeriesRef.current.update(data);
-				setLiveDataCount((prev) => prev + 1);
-				addDebugInfo(`📈 Updated chart with live crypto data (1Min timeframe)`);
-			} else if (selectedTimeframeRef.current !== "1Min") {
-				addDebugInfo(`📊 Ignoring live crypto data - timeframe is ${selectedTimeframeRef.current} (not 1Min)`);
-			}
-		});
+				socket.on("error", (err: any) => {
+					addDebugInfo(`🔴 Socket error: ${err.message}`);
+					// Don't show socket errors as user errors - they're configuration issues
+					setConnectionStatus("error");
+				});
 
-		socket.on("alpaca_error", (error: any) => {
-			addDebugInfo(`🔴 Alpaca error: ${JSON.stringify(error)}`);
-			// Don't show alpaca errors as user errors - they're configuration issues
-			setWebsocketEnabled(false);
-		});
+				// Data events - listen for crypto_bar instead of stock_bar
+				socket.on("crypto_bar", (data: any) => {
+					addDebugInfo(`📊 Received crypto_bar data: ${JSON.stringify(data)}`);
+					// Only update chart with live data if timeframe is 1Min
+					if (candlestickSeriesRef.current && selectedTimeframeRef.current === "1Min") {
+						// Update the chart with live data
+						candlestickSeriesRef.current.update(data);
+						setLiveDataCount((prev) => prev + 1);
+						addDebugInfo(`📈 Updated chart with live crypto data (1Min timeframe)`);
+					} else if (selectedTimeframeRef.current !== "1Min") {
+						addDebugInfo(`📊 Ignoring live crypto data - timeframe is ${selectedTimeframeRef.current} (not 1Min)`);
+					}
+				});
 
-		socket.on("alpaca_connected", () => {
-			addDebugInfo("✅ Alpaca WebSocket connected");
-		});
+				socket.on("alpaca_error", (error: any) => {
+					addDebugInfo(`🔴 Alpaca error: ${JSON.stringify(error)}`);
+					// Don't show alpaca errors as user errors - they're configuration issues
+					setWebsocketEnabled(false);
+				});
 
-		socket.on("alpaca_disconnected", (reason: string) => {
-			addDebugInfo(`❌ Alpaca WebSocket disconnected: ${reason}`);
-		});
+				socket.on("alpaca_connected", () => {
+					addDebugInfo("✅ Alpaca WebSocket connected");
+				});
+
+				socket.on("alpaca_disconnected", (reason: string) => {
+					addDebugInfo(`❌ Alpaca WebSocket disconnected: ${reason}`);
+				});
+			})
+			.catch((err) => {
+				addDebugInfo(`Socket endpoint error: ${err.message}`);
+				setError(`Failed to initialize socket endpoint: ${err.message}`);
+				setWebsocketEnabled(false);
+			});
 
 		// Add cleanup for tab closure
 		const handleBeforeUnload = () => {

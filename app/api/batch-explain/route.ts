@@ -25,6 +25,8 @@ export async function POST(req: Request) {
     const prompt = makeBatchPrompt(items);
     const fullPrompt = `${VALUE_ANALYSIS_SYSTEM_PROMPT}\n\n${prompt}`;
 
+    console.log(`🤖 Making Gemini API call for ${items.length} items: ${items.map(i => `${i.symbol}_${i.metric}`).join(', ')}`);
+
     // UPDATED: Passing key in URL and using the updated model URL
     const res = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
       method: "POST",

@@ -164,8 +164,8 @@ export class AlpacaService {
 
         // Handle stock trade data
         this.ws.onStockTrade((trade: any) => {
-          console.log("🔍 DEBUG: Received stock trade data:", trade);
-          console.log(`📊 Received stock trade for ${trade.symbol}:`, trade);
+          const symbol = trade.Symbol || trade.symbol;
+          console.log(`📊 Received stock trade for ${symbol}: $${trade.Price || trade.price}`);
           this.handleTradeData(trade);
         });
 
@@ -222,18 +222,23 @@ export class AlpacaService {
   }
 
   private handleTradeData(trade: any) {
-    const symbol = trade.symbol;
+    // Alpaca SDK returns PascalCase properties (Symbol, Price, etc.)
+    const symbol = trade.Symbol || trade.symbol;
 
     // Only process if we have callbacks for this symbol
     if (!this.dataCallbacks.has(symbol)) return;
 
+    const price = trade.Price || trade.price;
+    const timestamp = trade.Timestamp || trade.timestamp;
+    const size = trade.Size || trade.size || 1;
+
     const candlestickData = {
-      time: convertToESTTimestamp(trade.timestamp),
-      open: trade.open || trade.price,
-      high: trade.high || trade.price,
-      low: trade.low || trade.price,
-      close: trade.close || trade.price,
-      volume: trade.volume || 1,
+      time: convertToESTTimestamp(timestamp),
+      open: price,
+      high: price,
+      low: price,
+      close: price,
+      volume: size,
     };
 
     // Notify all callbacks for this symbol
@@ -244,18 +249,19 @@ export class AlpacaService {
   }
 
   private handleBarData(bar: any) {
-    const symbol = bar.symbol;
+    // Alpaca SDK returns PascalCase properties (Symbol, Open, High, etc.)
+    const symbol = bar.Symbol || bar.symbol;
 
     // Only process if we have callbacks for this symbol
     if (!this.dataCallbacks.has(symbol)) return;
 
     const candlestickData = {
-      time: convertToESTTimestamp(bar.timestamp),
-      open: bar.open,
-      high: bar.high,
-      low: bar.low,
-      close: bar.close,
-      volume: bar.volume,
+      time: convertToESTTimestamp(bar.Timestamp || bar.timestamp),
+      open: bar.Open || bar.open,
+      high: bar.High || bar.high,
+      low: bar.Low || bar.low,
+      close: bar.Close || bar.close,
+      volume: bar.Volume || bar.volume,
     };
 
     // Notify all callbacks for this symbol

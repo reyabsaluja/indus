@@ -95,9 +95,17 @@ export async function batchPreload(items: Item[]) {
     (item) => !explanationCache.has(makeKey(item.symbol, item.metric)),
   );
 
+  const cachedCount = items.length - toFetch.length;
+  if (cachedCount > 0) {
+    console.log(`📦 [Client Cache] ${cachedCount}/${items.length} items served from cache`);
+  }
+
   if (toFetch.length === 0) {
+    console.log(`✅ [Client Cache] All ${items.length} items were cached - no API call needed`);
     return;
   }
+
+  console.log(`🔍 [Client Cache] Fetching ${toFetch.length} items from Gemini API...`);
 
   // Set batch preload flag to prevent individual requests
   batchPreloadInProgress = true;
@@ -111,6 +119,8 @@ export async function batchPreload(items: Item[]) {
     const data = await res.json();
 
     if (data.explanations) {
+      const newKeys = Object.keys(data.explanations);
+      console.log(`✅ [Client Cache] Received and cached ${newKeys.length} explanations from Gemini`);
       for (const [key, text] of Object.entries(data.explanations)) {
         explanationCache.set(key, text as string);
         notifyCacheUpdate(key);

@@ -1,21 +1,21 @@
 import { Server } from "socket.io";
 import { AlpacaService, setSocketServer } from "@/lib/server/alpaca-server";
 import { NextApiRequest, NextApiResponse } from "next";
+import type { Server as HTTPServer } from "http";
 
 let ioInstance: Server | null = null;
 let alpacaService: AlpacaService | null = null;
+let alpacaReady = false;
+let alpacaConnectionPromise: Promise<void> | null = null;
 
-export default function handler(req: NextApiRequest, res: NextApiResponse & {
-  socket: {
-    server: {
-      io?: Server;
-    }
-  }
-}) {
-  if (!res.socket.server.io) {
+export default function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Access the underlying HTTP server with Socket.IO extension
+  const httpServer = (res.socket as any)?.server as HTTPServer & { io?: Server };
+  
+  if (!httpServer.io) {
     console.log("🔌 Starting Socket.IO server...");
 
-    const io = new Server(res.socket.server, {
+    const io = new Server(httpServer, {
       path: "/api/socket_io", // match client path
       addTrailingSlash: false,
       cors: {
@@ -24,7 +24,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse & {
       },
     });
 
-    res.socket.server.io = io;
+    httpServer.io = io;
     ioInstance = io;
 
     // Initialize Alpaca service
@@ -32,15 +32,17 @@ export default function handler(req: NextApiRequest, res: NextApiResponse & {
     alpacaService = new AlpacaService();
     setSocketServer(io);
 
-    // Connect to Alpaca WebSocket
-    alpacaService
+    // Connect to Alpaca WebSocket and track the promise
+    alpacaConnectionPromise = alpacaService
       .connectWebSocket()
       .then(() => {
         console.log("✅ Alpaca WebSocket connected successfully");
+        alpacaReady = true;
         io.emit("alpaca_connected", { message: "Alpaca WebSocket connected" });
       })
       .catch((error) => {
         console.error("❌ Failed to connect to Alpaca WebSocket:", error);
+        alpacaReady = false;
         io.emit("alpaca_error", {
           message: "Failed to connect to Alpaca WebSocket",
           error: error instanceof Error ? error.message : String(error),
@@ -58,6 +60,21 @@ export default function handler(req: NextApiRequest, res: NextApiResponse & {
 
         try {
           if (alpacaService) {
+            // Wait for Alpaca connection if not ready yet
+            if (!alpacaReady && alpacaConnectionPromise) {
+              console.log(`⏳ Waiting for Alpaca WebSocket to connect before subscribing to ${data.symbol}...`);
+              await alpacaConnectionPromise;
+            }
+
+            // Check if connection succeeded
+            if (!alpacaReady) {
+              socket.emit("alpaca_error", {
+                message: `Real-time data not available for ${data.symbol}`,
+                error: "Alpaca WebSocket connection failed",
+              });
+              return;
+            }
+
             // Subscribe to symbol and forward data to this client
             await alpacaService.subscribeToSymbol(
               data.symbol,
