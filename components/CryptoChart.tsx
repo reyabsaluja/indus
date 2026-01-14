@@ -1,10 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createChart, CandlestickSeries, IChartApi, ISeriesApi, CandlestickData } from "lightweight-charts";
-import io from "socket.io-client";
+import { createChart, CandlestickSeries, IChartApi, ISeriesApi } from "lightweight-charts";
+import io, { Socket } from "socket.io-client";
+import type { CandlestickData, Time } from "lightweight-charts";
 
-let socket: any;
+// Use CandlestickData from lightweight-charts for type compatibility
+type BarData = CandlestickData<Time>;
+
+let socket: Socket | null = null;
 
 // Add styles for the slider
 const sliderStyles = `
@@ -42,11 +46,10 @@ const sliderStyles = `
 interface CryptoChartProps {
 	symbol: string;
 	height?: number;
-	showControls?: boolean;
 	className?: string;
 }
 
-export default function CryptoChart({ symbol: initialSymbol, height = 500, showControls = true, className = "" }: CryptoChartProps) {
+export default function CryptoChart({ symbol: initialSymbol, height = 500, className = "" }: CryptoChartProps) {
 	const chartContainerRef = useRef<HTMLDivElement>(null);
 	const chartRef = useRef<IChartApi | null>(null);
 	const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -55,12 +58,7 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [connectionStatus, setConnectionStatus] = useState("disconnected");
-	const [liveDataCount, setLiveDataCount] = useState(0);
-	const [debugInfo, setDebugInfo] = useState<string[]>([]);
-	const [historicalData, setHistoricalData] = useState<any[]>([]);
-	const [isLoadingHistorical, setIsLoadingHistorical] = useState(false);
 	const [isLoadingMoreData, setIsLoadingMoreData] = useState(false);
-	const [earliestLoadedDate, setEarliestLoadedDate] = useState<number | null>(null);
 	const [hasReachedDataLimit, setHasReachedDataLimit] = useState(false);
 	const [dataLimitMessage, setDataLimitMessage] = useState<string | null>(null);
 	const [websocketEnabled, setWebsocketEnabled] = useState(true);
@@ -70,10 +68,9 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 	const earliestLoadedDateRef = useRef<number | null>(null);
 	const selectedSymbolRef = useRef(selectedSymbol);
 	const selectedTimeframeRef = useRef(selectedTimeframe);
-	const historicalDataRef = useRef<any[]>([]);
+	const historicalDataRef = useRef<BarData[]>([]);
 	const hasReachedDataLimitRef = useRef(false);
 
-	const popularSymbols = ["BTC", "ETH", "USDT", "BNB", "SOL", "USDC", "XRP", "DOGE"];
 	const timeframes = [
 		{ value: "1Min", label: "1 Min" },
 		{ value: "5Min", label: "5 Min" },
@@ -84,13 +81,14 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 		{ value: "1Month", label: "1 Month" },
 	];
 
+	// Add debug info only in development mode
 	const addDebugInfo = (message: string) => {
-		console.log(`🔍 DEBUG: ${message}`);
-		setDebugInfo((prev) => [...prev.slice(-9), `${new Date().toLocaleTimeString()}: ${message}`]);
+		if (process.env.NODE_ENV === "development") {
+			console.log(`🔍 DEBUG: ${message}`);
+		}
 	};
 
 	const loadHistoricalData = async (symbol: string, timeframe: string = selectedTimeframe) => {
-		setIsLoadingHistorical(true);
 		addDebugInfo(`Loading historical crypto data for ${symbol} (${timeframe})...`);
 
 		// Clear existing chart data immediately to prevent timeframe mixing
@@ -108,14 +106,13 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 			const result = await response.json();
 
 			if (response.ok && result.data) {
-				// Sort data to ensure proper ordering
-				const sortedData = result.data.sort((a: any, b: any) => a.time - b.time);
+				// Sort data to ensure proper ordering (time is a number - Unix timestamp)
+				const sortedData = result.data.sort((a: BarData, b: BarData) => (a.time as number) - (b.time as number));
 
-				setHistoricalData(sortedData);
 				historicalDataRef.current = sortedData;
 				const earliestTime = sortedData.length > 0 ? sortedData[0].time : null;
-				setEarliestLoadedDate(earliestTime);
 				earliestLoadedDateRef.current = earliestTime;
+
 				addDebugInfo(`Set earliestLoadedDate to: ${earliestTime} (first bar time: ${sortedData[0]?.time})`);
 
 				// Show detailed info about the data loaded
@@ -137,8 +134,6 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 		} catch (error) {
 			addDebugInfo(`Error loading historical crypto data: ${error}`);
 			setError(`Error loading historical crypto data: ${error}`);
-		} finally {
-			setIsLoadingHistorical(false);
 		}
 	};
 
@@ -169,25 +164,23 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 			addDebugInfo(`API response for more crypto data: status=${response.ok}, dataLength=${result.data?.length}, error=${result.error}`);
 
 			if (response.ok && result.data && result.data.length > 0) {
-				// Sort new data to ensure proper ordering
-				const sortedNewData = result.data.sort((a: any, b: any) => a.time - b.time);
+				// Sort new data to ensure proper ordering (time is a number - Unix timestamp)
+				const sortedNewData = result.data.sort((a: BarData, b: BarData) => (a.time as number) - (b.time as number));
 
 				// Combine new data with existing data
 				const existingData = historicalDataRef.current;
 
 				// Combine and sort all data to prevent ordering issues
-				const combinedData = [...sortedNewData, ...existingData].sort((a: any, b: any) => a.time - b.time);
+				const combinedData = [...sortedNewData, ...existingData].sort((a: BarData, b: BarData) => (a.time as number) - (b.time as number));
 
 				// Remove any duplicate entries based on time
-				const uniqueData = combinedData.filter((item: any, index: number, arr: any[]) => index === 0 || item.time !== arr[index - 1].time);
+				const uniqueData = combinedData.filter((item: BarData, index: number, arr: BarData[]) => index === 0 || item.time !== arr[index - 1].time);
 
 				// Use unique data without additional filtering
 				const continuousData = uniqueData;
 
 				// Update state
-				setHistoricalData(continuousData);
 				historicalDataRef.current = continuousData;
-				setEarliestLoadedDate(continuousData[0].time);
 				earliestLoadedDateRef.current = continuousData[0].time;
 
 				addDebugInfo(`Loading more crypto data: Added ${sortedNewData.length} bars, total: ${continuousData.length} (filtered ${combinedData.length - continuousData.length} gaps/duplicates)`);
@@ -322,17 +315,6 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 	useEffect(() => {
 		addDebugInfo("Initializing socket connection...");
 
-		// Connect to the socket endpoint
-		fetch("/api/socket")
-			.then(() => {
-				addDebugInfo("Socket endpoint initialized");
-			})
-			.catch((err) => {
-				addDebugInfo(`Socket endpoint error: ${err.message}`);
-				setError(`Failed to initialize socket endpoint: ${err.message}`);
-				setWebsocketEnabled(false);
-			});
-
 		// Only try to connect to socket.io if websocket is enabled
 		if (!websocketEnabled) {
 			addDebugInfo("WebSocket disabled due to configuration issues");
@@ -340,64 +322,78 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 			return;
 		}
 
-		socket = io({
-			path: "/api/socket_io",
-			transports: ["websocket", "polling"],
-			timeout: 10000,
-		});
+		// Connect to the socket endpoint first to initialize the server
+		fetch("/api/socket")
+			.then(() => {
+				addDebugInfo("Socket endpoint initialized");
 
-		// Connection events
-		socket.on("connect", () => {
-			addDebugInfo("✅ Connected to socket.io");
-			setConnectionStatus("connected");
-			setError(null);
-		});
+				// Now connect to socket.io after the server is initialized
+				socket = io({
+					path: "/api/socket_io",
+					transports: ["websocket", "polling"],
+					timeout: 10000,
+					reconnection: true,
+					reconnectionAttempts: 5,
+					reconnectionDelay: 1000,
+				});
 
-		socket.on("disconnect", (reason: string) => {
-			addDebugInfo(`❌ Disconnected from socket.io: ${reason}`);
-			setConnectionStatus("disconnected");
-		});
+				// Connection events
+				socket.on("connect", () => {
+					addDebugInfo("✅ Connected to socket.io");
+					setConnectionStatus("connected");
+					setError(null);
+				});
 
-		socket.on("connect_error", (err: any) => {
-			addDebugInfo(`🔴 Connection error: ${err.message}`);
-			setError(null); // Don't show connection errors as user errors
-			setConnectionStatus("error");
-			setWebsocketEnabled(false);
-		});
+				socket.on("disconnect", (reason: string) => {
+					addDebugInfo(`❌ Disconnected from socket.io: ${reason}`);
+					setConnectionStatus("disconnected");
+				});
 
-		socket.on("error", (err: any) => {
-			addDebugInfo(`🔴 Socket error: ${err.message}`);
-			// Don't show socket errors as user errors - they're configuration issues
-			setConnectionStatus("error");
-		});
+				socket.on("connect_error", (err: Error) => {
+					addDebugInfo(`🔴 Connection error: ${err.message}`);
+					setError(null); // Don't show connection errors as user errors
+					setConnectionStatus("error");
+					setWebsocketEnabled(false);
+				});
 
-		// Data events - listen for crypto_bar instead of stock_bar
-		socket.on("crypto_bar", (data: any) => {
-			addDebugInfo(`📊 Received crypto_bar data: ${JSON.stringify(data)}`);
-			// Only update chart with live data if timeframe is 1Min
-			if (candlestickSeriesRef.current && selectedTimeframeRef.current === "1Min") {
-				// Update the chart with live data
-				candlestickSeriesRef.current.update(data);
-				setLiveDataCount((prev) => prev + 1);
-				addDebugInfo(`📈 Updated chart with live crypto data (1Min timeframe)`);
-			} else if (selectedTimeframeRef.current !== "1Min") {
-				addDebugInfo(`📊 Ignoring live crypto data - timeframe is ${selectedTimeframeRef.current} (not 1Min)`);
-			}
-		});
+				socket.on("error", (err: Error) => {
+					addDebugInfo(`🔴 Socket error: ${err.message}`);
+					// Don't show socket errors as user errors - they're configuration issues
+					setConnectionStatus("error");
+				});
 
-		socket.on("alpaca_error", (error: any) => {
-			addDebugInfo(`🔴 Alpaca error: ${JSON.stringify(error)}`);
-			// Don't show alpaca errors as user errors - they're configuration issues
-			setWebsocketEnabled(false);
-		});
+				// Data events - listen for crypto_bar instead of stock_bar
+				socket.on("crypto_bar", (data: BarData) => {
+					addDebugInfo(`📊 Received crypto_bar data: ${JSON.stringify(data)}`);
+					// Only update chart with live data if timeframe is 1Min
+					if (candlestickSeriesRef.current && selectedTimeframeRef.current === "1Min") {
+						// Update the chart with live data
+						candlestickSeriesRef.current.update(data);
+						addDebugInfo(`📈 Updated chart with live crypto data (1Min timeframe)`);
+					} else if (selectedTimeframeRef.current !== "1Min") {
+						addDebugInfo(`📊 Ignoring live crypto data - timeframe is ${selectedTimeframeRef.current} (not 1Min)`);
+					}
+				});
 
-		socket.on("alpaca_connected", () => {
-			addDebugInfo("✅ Alpaca WebSocket connected");
-		});
+				socket.on("alpaca_error", (error: { message: string; error?: string }) => {
+					addDebugInfo(`🔴 Alpaca error: ${JSON.stringify(error)}`);
+					// Don't show alpaca errors as user errors - they're configuration issues
+					setWebsocketEnabled(false);
+				});
 
-		socket.on("alpaca_disconnected", (reason: string) => {
-			addDebugInfo(`❌ Alpaca WebSocket disconnected: ${reason}`);
-		});
+				socket.on("alpaca_connected", () => {
+					addDebugInfo("✅ Alpaca WebSocket connected");
+				});
+
+				socket.on("alpaca_disconnected", (reason: string) => {
+					addDebugInfo(`❌ Alpaca WebSocket disconnected: ${reason}`);
+				});
+			})
+			.catch((err) => {
+				addDebugInfo(`Socket endpoint error: ${err.message}`);
+				setError(`Failed to initialize socket endpoint: ${err.message}`);
+				setWebsocketEnabled(false);
+			});
 
 		// Add cleanup for tab closure
 		const handleBeforeUnload = () => {
@@ -439,21 +435,18 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 		hasReachedDataLimitRef.current = hasReachedDataLimit;
 	}, [hasReachedDataLimit]);
 
-	// Handle symbol and timeframe changes (data loading only)
+	// Handle symbol changes (data loading only) - timeframe changes are handled by onClick
 	useEffect(() => {
-		// Reset data state when symbol or timeframe changes
-		setHistoricalData([]);
+		// Reset data state when symbol changes
 		historicalDataRef.current = [];
-		setEarliestLoadedDate(null);
 		earliestLoadedDateRef.current = null;
-		setLiveDataCount(0);
 		setHasReachedDataLimit(false);
 		hasReachedDataLimitRef.current = false;
 		setDataLimitMessage(null);
 
-		// Load historical data for new symbol/timeframe
-		loadHistoricalData(selectedSymbol);
-	}, [selectedSymbol, selectedTimeframe]);
+		// Load historical data for new symbol
+		loadHistoricalData(selectedSymbol, selectedTimeframe);
+	}, [selectedSymbol]); // Only trigger on symbol change, not timeframe
 
 	// Handle WebSocket subscriptions separately
 	useEffect(() => {
@@ -461,7 +454,6 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 		if (websocketEnabled && socket && socket.connected) {
 			addDebugInfo(`Subscribing to crypto symbol: ${selectedSymbol}`);
 			socket.emit("subscribe", { symbol: selectedSymbol, type: "crypto" });
-			setLiveDataCount(0); // Reset counter for new symbol
 		} else {
 			if (!websocketEnabled) {
 				addDebugInfo(`WebSocket disabled - using historical data only for ${selectedSymbol}`);
@@ -490,11 +482,8 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 									key={timeframe.value}
 									onClick={() => {
 										// Clear all data states before switching timeframe
-										setHistoricalData([]);
 										historicalDataRef.current = [];
-										setEarliestLoadedDate(null);
 										earliestLoadedDateRef.current = null;
-										setLiveDataCount(0);
 										setHasReachedDataLimit(false);
 										hasReachedDataLimitRef.current = false;
 										setDataLimitMessage(null);

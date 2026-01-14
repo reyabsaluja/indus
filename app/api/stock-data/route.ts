@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import yahooFinance from "yahoo-finance2";
+import YahooFinance from "yahoo-finance2";
+
+const yahooFinance = new YahooFinance({
+    suppressNotices: ["yahooSurvey"],
+});
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -8,111 +12,6 @@ export async function GET(request: Request) {
   if (!symbol) {
     return NextResponse.json({ error: "Symbol is required" }, { status: 400 });
   }
-
-  // Fallback data for common stocks (realistic recent data from Friday's close)
-  const fallbackData: Record<string, {
-    price: number;
-    change: number;
-    changePercent: number;
-    name: string;
-  }> = {
-    AAPL: {
-      price: 227.52,
-      change: 1.08,
-      changePercent: 0.48,
-      name: "Apple Inc.",
-    },
-    GOOGL: {
-      price: 181.71,
-      change: -0.87,
-      changePercent: -0.48,
-      name: "Alphabet Inc.",
-    },
-    MSFT: {
-      price: 452.74,
-      change: 2.13,
-      changePercent: 0.47,
-      name: "Microsoft Corporation",
-    },
-    TSLA: {
-      price: 248.5,
-      change: -1.22,
-      changePercent: -0.49,
-      name: "Tesla, Inc.",
-    },
-    META: {
-      price: 598.67,
-      change: 4.32,
-      changePercent: 0.73,
-      name: "Meta Platforms, Inc.",
-    },
-    NVDA: {
-      price: 140.15,
-      change: 0.85,
-      changePercent: 0.61,
-      name: "NVIDIA Corporation",
-    },
-    AMZN: {
-      price: 200.43,
-      change: -0.95,
-      changePercent: -0.47,
-      name: "Amazon.com Inc.",
-    },
-    NFLX: {
-      price: 700.99,
-      change: 3.21,
-      changePercent: 0.46,
-      name: "Netflix, Inc.",
-    },
-    SPOT: {
-      price: 368.77,
-      change: -2.15,
-      changePercent: -0.58,
-      name: "Spotify Technology S.A.",
-    },
-    SHOP: {
-      price: 105.67,
-      change: 1.87,
-      changePercent: 1.8,
-      name: "Shopify Inc.",
-    },
-  };
-
-  // Fallback data for common cryptocurrencies
-  const cryptoFallbackData: Record<string, {
-    price: number;
-    change: number;
-    changePercent: number;
-    name: string;
-  }> = {
-    "BTC-USD": {
-      price: 118114.26,
-      change: -170.16,
-      changePercent: -0.14,
-      name: "Bitcoin USD",
-      marketCap: 2349871661056,
-      circulatingSupply: 19894904,
-      volume: 48058085376,
-    },
-    "ETH-USD": {
-      price: 3748.01,
-      change: 185.11,
-      changePercent: 5.20,
-      name: "Ethereum USD",
-      marketCap: 452430135296,
-      circulatingSupply: 120000000,
-      volume: 32514562048,
-    },
-    "ADA-USD": {
-      price: 0.85,
-      change: 0.024,
-      changePercent: 2.92,
-      name: "Cardano USD",
-      marketCap: 30174181376,
-      circulatingSupply: 35400000000,
-      volume: 1222295296,
-    },
-  };
 
   try {
     // Try to fetch real Yahoo Finance data first
@@ -134,9 +33,6 @@ export async function GET(request: Request) {
             "financialData",
             "summaryDetail",
             "assetProfile",
-            "incomeStatementHistory",
-            "balanceSheetHistory",
-            "cashflowStatementHistory",
           ],
         }),
       ]);
@@ -148,43 +44,19 @@ export async function GET(request: Request) {
       shortName = quote.shortName || quote.displayName || symbol;
       longName = quote.longName || shortName;
 
-      console.log(`Yahoo Finance data for ${symbol}:`, {
-        price: currentPrice,
-        change: change,
-        changePercent: changePercent,
-        hasQuoteSummary: !!quoteSummary,
-        quoteType: quote.quoteType,
-      });
+    //   console.log(`Yahoo Finance data for ${symbol}:`, {
+    //     price: currentPrice,
+    //     change: change,
+    //     changePercent: changePercent,
+    //     hasQuoteSummary: !!quoteSummary,
+    //     quoteType: quote.quoteType,
+    //   });
     } catch (apiError) {
-      console.warn(
-        `Yahoo Finance API failed for ${symbol}, using fallback data:`,
-        apiError,
+      console.error(`Yahoo Finance API failed for ${symbol}:`, apiError);
+      return NextResponse.json(
+        { error: `Failed to fetch data for ${symbol}` },
+        { status: 500 }
       );
-
-      // Check if it's a crypto symbol and use crypto fallback
-      const isCrypto = symbol.includes('-USD') || symbol.includes('-USDT') || symbol.includes('-BTC');
-      const fallback = isCrypto ? cryptoFallbackData[symbol] : fallbackData[symbol.toUpperCase()];
-      
-      if (fallback) {
-        currentPrice = fallback.price;
-        change = fallback.change;
-        changePercent = fallback.changePercent;
-        shortName = fallback.name;
-        longName = fallback.name;
-      } else {
-        // Generate realistic random data for unknown symbols
-        if (isCrypto) {
-          currentPrice = 0.01 + Math.random() * 1000; // $0.01-$1000 for crypto
-          change = (Math.random() - 0.5) * 100; // ±$50
-          changePercent = (change / currentPrice) * 100;
-        } else {
-          currentPrice = 50 + Math.random() * 200; // $50-$250 for stocks
-          change = (Math.random() - 0.5) * 10; // ±$5
-          changePercent = (change / currentPrice) * 100;
-        }
-        shortName = symbol;
-        longName = symbol;
-      }
     }
 
     // Check if this is a cryptocurrency
@@ -247,7 +119,6 @@ export async function GET(request: Request) {
       developerScore: null, // Not available from Yahoo Finance
       liquidityScore: null, // Not available from Yahoo Finance
       volatility: null, // Would need historical data calculation
-      beta: null, // Not typically available for crypto
       sharpeRatio: null, // Would need historical data calculation
 
       // Valuation metrics (TTM) - mostly not applicable for crypto

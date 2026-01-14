@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import Alpaca from "@alpacahq/alpaca-trade-api";
 
+const EST_TIMEZONE_OFFSET = 5 * 60 * 60; // 5 hours in seconds
+
 interface BarData {
   time: number;
   open: number;
@@ -11,17 +13,24 @@ interface BarData {
 }
 
 // Helper function to convert timestamp to EST timezone
+// DO NOT REMOVE THIS FUNCTION: Lightweight Charts does not support local timezones so the timezone is always EST
 function convertToESTTimestamp(timestamp: string | Date): number {
   const date = new Date(timestamp);
-  return Math.floor((date.getTime() - date.getTimezoneOffset() * 60 * 1000) / 1000);
+  return Math.floor((date.getTime() - EST_TIMEZONE_OFFSET * 1000) / 1000);
 }
+
+// Helper function to revert the EST timestamp conversion to UTC
+// DO NOT REMOVE THIS FUNCTION: Lightweight Charts does not support local timezones so the timezone is always EST
+function convertToUTCTimestamp(estTimestamp: number): number {
+    return estTimestamp + EST_TIMEZONE_OFFSET;
+  }
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const symbol = searchParams.get("symbol");
   const type = searchParams.get("type") || "stock"; // "stock" or "crypto"
   const timeframe = searchParams.get("timeframe") || "1Min";
-  const limit = parseInt(searchParams.get("limit") || "10000"); // Reduced limit for better performance
+  const limit = parseInt(searchParams.get("limit") || "2000"); // Reduced limit for better performance
   const startParam = searchParams.get("start");
   const endParam = searchParams.get("end");
 
@@ -53,34 +62,38 @@ export async function GET(request: NextRequest) {
 
     // Calculate start and end dates
     let startDate: Date;
-    let endDate: Date;
+    // Use default date range based on timeframe if no end date is provided
+    const endDate: Date = endParam ? new Date(parseInt(endParam) * 1000) : new Date();
 
-    if (startParam && endParam) {
-      // Use custom date range
+    if (startParam) {
+      // Use custom start date
       startDate = new Date(parseInt(startParam) * 1000);
-      endDate = new Date(parseInt(endParam) * 1000);
     } else {
-      // Use default date range based on timeframe
-      endDate = new Date();
-
+      // Date ranges optimized for ~1000 bars with clean calendar intervals
       switch (timeframe) {
         case "1Min":
+          startDate = new Date(endDate.getTime() - 5 * 24 * 60 * 60 * 1000); // 5 days
+          break;
         case "5Min":
-          startDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+          startDate = new Date(endDate.getTime() - 14 * 24 * 60 * 60 * 1000); // 2 weeks
           break;
         case "15Min":
+          startDate = new Date(endDate.getTime() - 45 * 24 * 60 * 60 * 1000); // 45 days
+          break;
         case "1Hour":
-          startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+          startDate = new Date(endDate.getTime() - 180 * 24 * 60 * 60 * 1000); // 6 months
           break;
         case "1Day":
-          startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+          startDate = new Date(endDate.getTime() - 4 * 365 * 24 * 60 * 60 * 1000); // 4 years
           break;
         case "1Week":
+          startDate = new Date(endDate.getTime() - 20 * 365 * 24 * 60 * 60 * 1000); // 20 years
+          break;
         case "1Month":
-          startDate = new Date(Date.now() - 1 * 365 * 24 * 60 * 60 * 1000);
+          startDate = new Date(endDate.getTime() - 20 * 365 * 24 * 60 * 60 * 1000); // 20 years
           break;
         default:
-          startDate = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000);
+          startDate = new Date(endDate.getTime() - 5 * 24 * 60 * 60 * 1000); // 5 days
       }
     }
 
@@ -89,10 +102,10 @@ export async function GET(request: NextRequest) {
     let pageToken: string | undefined = undefined;
     let totalFetched = 0;
 
+    console.log(`📊 Fetching stock bars for ${symbol} from ${startDate.toLocaleString()} to ${endDate.toLocaleString()}`);
+
     if (type === "crypto") {
       // Use getCryptoBars for crypto symbols
-      console.log(`📊 Fetching crypto bars for ${symbol} from ${startDate.toLocaleString()} to ${endDate.toLocaleString()}`);
-      
       const barsResponse = await alpaca.getCryptoBars([symbol.toUpperCase()], {
         start: startDate,
         end: endDate,
@@ -134,6 +147,7 @@ export async function GET(request: NextRequest) {
           timeframe: timeframe,
           limit: limit,
           feed: "iex",
+          adjustment: "split", // Adjust for stock splits to prevent price discontinuities
           page_token: pageToken,
         });
 
@@ -174,22 +188,14 @@ export async function GET(request: NextRequest) {
     );
 
     return NextResponse.json({
-      symbol: symbol.toUpperCase(),
-      timeframe,
       data: sortedData,
-      metadata: {
-        totalBars: sortedData.length,
-        timeframe: timeframe,
-        dateRange:
-          sortedData.length > 0
-            ? {
-                start: new Date(sortedData[0].time * 1000).toLocaleString(),
-                end: new Date(
-                  sortedData[sortedData.length - 1].time * 1000,
-                ).toLocaleString(),
-              }
-            : null,
-      },
+      isEmpty: sortedData.length < 2,
+      symbol: symbol.toUpperCase(),
+      timeframe: timeframe,
+      totalBars: sortedData.length,
+      // Convert back from EST to UTC
+      earliestTimestamp: sortedData.length > 0 ? convertToUTCTimestamp(sortedData[0].time) : null,
+      latestTimestamp: sortedData.length > 0 ? convertToUTCTimestamp(sortedData[sortedData.length - 1].time) : null,
     });
   } catch (error) {
     console.error(`❌ Error fetching historical data for ${symbol}:`, error);
