@@ -3,19 +3,6 @@
 
 import Alpaca from "@alpacahq/alpaca-trade-api";
 
-interface WebSocketMessage {
-  T: string; // message type
-  S: string; // symbol
-  t: string; // timestamp
-  o: number; // open
-  h: number; // high
-  l: number; // low
-  c: number; // close
-  v: number; // volume
-  n: number; // number of trades
-  vw: number; // volume weighted average price
-}
-
 type DataCallback = (data: any) => void;
 
 // Helper function to convert timestamp to EST timezone (same as alpaca route)
@@ -163,15 +150,16 @@ export class AlpacaService {
         });
 
         // Handle stock trade data
-        this.ws.onStockTrade((trade: any) => {
-          const symbol = trade.Symbol || trade.symbol;
-          console.log(`📊 Received stock trade for ${symbol}: $${trade.Price || trade.price}`);
-          this.handleTradeData(trade);
-        });
+        // High frequency trade data, disabled for now to prevent rate limiting
+        // this.ws.onStockTrade((trade: any) => {
+        //   const symbol = trade.Symbol || trade.symbol;
+        //   console.log(`📊 Received stock trade for ${symbol}: $${trade.Price || trade.price}`);
+        //   this.handleTradeData(trade);
+        // });
 
         // Handle stock bar data (candlesticks)
         this.ws.onStockBar((bar: any) => {
-          console.log("🔍 DEBUG: Received stock bar data:", bar);
+        //   console.log("🔍 DEBUG: Received stock bar data:", bar);
           this.handleBarData(bar);
         });
 
@@ -223,22 +211,18 @@ export class AlpacaService {
 
   private handleTradeData(trade: any) {
     // Alpaca SDK returns PascalCase properties (Symbol, Price, etc.)
-    const symbol = trade.Symbol || trade.symbol;
+    const symbol = trade.Symbol;
 
     // Only process if we have callbacks for this symbol
     if (!this.dataCallbacks.has(symbol)) return;
 
-    const price = trade.Price || trade.price;
-    const timestamp = trade.Timestamp || trade.timestamp;
-    const size = trade.Size || trade.size || 1;
-
     const candlestickData = {
-      time: convertToESTTimestamp(timestamp),
-      open: price,
-      high: price,
-      low: price,
-      close: price,
-      volume: size,
+      time: convertToESTTimestamp(trade.Timestamp),
+      open: trade.Price,
+      high: trade.Price,
+      low: trade.Price,
+      close: trade.Price,
+      volume: trade.Size,
     };
 
     // Notify all callbacks for this symbol
@@ -249,19 +233,19 @@ export class AlpacaService {
   }
 
   private handleBarData(bar: any) {
-    // Alpaca SDK returns PascalCase properties (Symbol, Open, High, etc.)
-    const symbol = bar.Symbol || bar.symbol;
+    // Alpaca SDK returns PascalCase properties (Symbol, OpenPrice, HighPrice, etc.)
+    const symbol = bar.Symbol;
 
     // Only process if we have callbacks for this symbol
     if (!this.dataCallbacks.has(symbol)) return;
 
     const candlestickData = {
-      time: convertToESTTimestamp(bar.Timestamp || bar.timestamp),
-      open: bar.Open || bar.open,
-      high: bar.High || bar.high,
-      low: bar.Low || bar.low,
-      close: bar.Close || bar.close,
-      volume: bar.Volume || bar.volume,
+      time: convertToESTTimestamp(bar.Timestamp),
+      open: bar.OpenPrice,
+      high: bar.HighPrice,
+      low: bar.LowPrice,
+      close: bar.ClosePrice,
+      volume: bar.Volume,
     };
 
     // Notify all callbacks for this symbol
@@ -272,7 +256,7 @@ export class AlpacaService {
   }
 
   private handleCryptoBarData(bar: any) {
-    const symbol = bar.S || bar.symbol; // Alpaca crypto uses 'S' for symbol
+    const symbol = bar.Symbol;
 
     console.log(`📊 Processing crypto bar for ${symbol}:`, bar);
 
@@ -284,12 +268,12 @@ export class AlpacaService {
     }
 
     const candlestickData = {
-      time: convertToESTTimestamp(bar.Timestamp || bar.timestamp),
-      open: bar.Open || bar.open,
-      high: bar.High || bar.high,
-      low: bar.Low || bar.low,
-      close: bar.Close || bar.close,
-      volume: bar.Volume || bar.volume,
+      time: convertToESTTimestamp(bar.Timestamp),
+      open: bar.Open,
+      high: bar.High,
+      low: bar.Low,
+      close: bar.Close,
+      volume: bar.Volume,
     };
 
     console.log(`📈 Sending candlestick data for ${symbol}:`, candlestickData);
@@ -328,12 +312,13 @@ export class AlpacaService {
   async subscribeToSymbol(symbol: string, callback: DataCallback, type: string = "stock") {
     console.log(`🔔 Attempting to subscribe to ${type} symbol: ${symbol}`);
     
-    if (type === "crypto" && !this.isCryptoConnected) {
-      console.error("❌ Crypto WebSocket not connected");
-      throw new Error("Crypto WebSocket not connected");
-    } else if (type === "stock" && !this.isConnected) {
-      console.error("❌ Stock WebSocket not connected");
-      throw new Error("Stock WebSocket not connected");
+    if (type === "crypto" && (!this.isCryptoConnected || !this.cryptoWs)) {
+        console.error("❌ Crypto WebSocket not connected or not initialized");
+        throw new Error("Crypto WebSocket not connected");
+    }
+    if (type === "stock" && (!this.isConnected || !this.ws)) {
+        console.error("❌ Stock WebSocket not connected or not initialized");
+        throw new Error("Stock WebSocket not connected");
     }
 
     // Store callback
@@ -351,7 +336,6 @@ export class AlpacaService {
         console.log(`📊 Subscribed to live crypto data for ${symbol}`);
       } else {
         // Subscribe to stock data using stock stream
-        this.ws.subscribeForTrades([symbol]);
         this.ws.subscribeForBars([symbol]);
         console.log(`📊 Subscribed to live stock data for ${symbol}`);
       }
@@ -392,7 +376,6 @@ export class AlpacaService {
         console.log(`📊 Unsubscribed from live crypto data for ${symbol}`);
       } else {
         // Unsubscribe from stock data using stock stream
-        this.ws.unsubscribeFromTrades([symbol]);
         this.ws.unsubscribeFromBars([symbol]);
         console.log(`📊 Unsubscribed from live stock data for ${symbol}`);
       }
@@ -415,7 +398,6 @@ export class AlpacaService {
       for (const symbol of this.subscribedSymbols) {
         try {
           if (this.ws && this.isConnected) {
-            this.ws.unsubscribeFromTrades([symbol]);
             this.ws.unsubscribeFromBars([symbol]);
           }
           if (this.cryptoWs && this.isCryptoConnected) {

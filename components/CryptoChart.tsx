@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createChart, CandlestickSeries, IChartApi, ISeriesApi, CandlestickData } from "lightweight-charts";
+import { createChart, CandlestickSeries, IChartApi, ISeriesApi } from "lightweight-charts";
 import io from "socket.io-client";
 
 let socket: any;
@@ -56,7 +56,6 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 	const [error, setError] = useState<string | null>(null);
 	const [connectionStatus, setConnectionStatus] = useState("disconnected");
 	const [liveDataCount, setLiveDataCount] = useState(0);
-	const [debugInfo, setDebugInfo] = useState<string[]>([]);
 	const [historicalData, setHistoricalData] = useState<any[]>([]);
 	const [isLoadingHistorical, setIsLoadingHistorical] = useState(false);
 	const [isLoadingMoreData, setIsLoadingMoreData] = useState(false);
@@ -73,7 +72,6 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 	const historicalDataRef = useRef<any[]>([]);
 	const hasReachedDataLimitRef = useRef(false);
 
-	const popularSymbols = ["BTC", "ETH", "USDT", "BNB", "SOL", "USDC", "XRP", "DOGE"];
 	const timeframes = [
 		{ value: "1Min", label: "1 Min" },
 		{ value: "5Min", label: "5 Min" },
@@ -84,9 +82,11 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 		{ value: "1Month", label: "1 Month" },
 	];
 
+	// Add debug info only in development mode
 	const addDebugInfo = (message: string) => {
-		console.log(`🔍 DEBUG: ${message}`);
-		setDebugInfo((prev) => [...prev.slice(-9), `${new Date().toLocaleTimeString()}: ${message}`]);
+		if (process.env.NODE_ENV === "development") {
+			console.log(`🔍 DEBUG: ${message}`);
+		}
 	};
 
 	const loadHistoricalData = async (symbol: string, timeframe: string = selectedTimeframe) => {
@@ -444,9 +444,9 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 		hasReachedDataLimitRef.current = hasReachedDataLimit;
 	}, [hasReachedDataLimit]);
 
-	// Handle symbol and timeframe changes (data loading only)
+	// Handle symbol changes (data loading only) - timeframe changes are handled by onClick
 	useEffect(() => {
-		// Reset data state when symbol or timeframe changes
+		// Reset data state when symbol changes
 		setHistoricalData([]);
 		historicalDataRef.current = [];
 		setEarliestLoadedDate(null);
@@ -456,9 +456,9 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 		hasReachedDataLimitRef.current = false;
 		setDataLimitMessage(null);
 
-		// Load historical data for new symbol/timeframe
-		loadHistoricalData(selectedSymbol);
-	}, [selectedSymbol, selectedTimeframe]);
+		// Load historical data for new symbol
+		loadHistoricalData(selectedSymbol, selectedTimeframe);
+	}, [selectedSymbol]); // Only trigger on symbol change, not timeframe
 
 	// Handle WebSocket subscriptions separately
 	useEffect(() => {

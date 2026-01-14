@@ -1,7 +1,36 @@
 import { Item } from "@/lib/prompts";
 
-// Global cache and loading state
-const explanationCache = new Map<string, string>();
+// localStorage key for persistent cache
+const STORAGE_KEY = "indus_explanations_cache";
+
+// Load cache from localStorage on initialization
+function loadCacheFromStorage(): Map<string, string> {
+  if (typeof window === "undefined") return new Map();
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return new Map(Object.entries(parsed));
+    }
+  } catch (e) {
+    // Silently fail - cache will be empty
+  }
+  return new Map();
+}
+
+// Save cache to localStorage
+function saveCacheToStorage(cache: Map<string, string>) {
+  if (typeof window === "undefined") return;
+  try {
+    const obj = Object.fromEntries(cache);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
+  } catch (e) {
+    // Silently fail - cache won't persist but app will continue working
+  }
+}
+
+// Global cache and loading state - initialized from localStorage
+const explanationCache = loadCacheFromStorage();
 const loadingState = new Map<string, boolean>();
 let preloadPromise: Promise<void> | null = null;
 
@@ -49,8 +78,8 @@ export function subscribeToCacheUpdates(
   };
 }
 
-// Track if batch preload is in progress
-let batchPreloadInProgress = false;
+// Track if batch preload is in progress - use a Promise for proper deduplication
+let pendingBatchRequest: Promise<void> | null = null;
 
 export async function fetchExplanation(
   symbol: string,
@@ -63,8 +92,9 @@ export async function fetchExplanation(
     return;
   }
 
-  // If batch preload is in progress, don't send individual requests
-  if (batchPreloadInProgress) {
+  // If batch preload is in progress, wait for it instead of starting a new one
+  if (pendingBatchRequest) {
+    await pendingBatchRequest;
     return;
   }
 
@@ -90,58 +120,61 @@ function getFallbackExplanation(
 }
 
 export async function batchPreload(items: Item[]) {
+  // If a batch request is already in progress, wait for it and return
+  // This prevents duplicate API calls from React Strict Mode or race conditions
+  if (pendingBatchRequest) {
+    await pendingBatchRequest;
+    return;
+  }
+
   // Only fetch if not already cached
   const toFetch = items.filter(
     (item) => !explanationCache.has(makeKey(item.symbol, item.metric)),
   );
 
-  const cachedCount = items.length - toFetch.length;
-  if (cachedCount > 0) {
-    console.log(`📦 [Client Cache] ${cachedCount}/${items.length} items served from cache`);
-  }
-
   if (toFetch.length === 0) {
-    console.log(`✅ [Client Cache] All ${items.length} items were cached - no API call needed`);
     return;
   }
 
-  console.log(`🔍 [Client Cache] Fetching ${toFetch.length} items from Gemini API...`);
+  // Create and store the promise BEFORE the async operation
+  // This ensures any concurrent calls will see the pending request
+  pendingBatchRequest = (async () => {
+    try {
+      const res = await fetch("/api/batch-explain", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(toFetch),
+      });
+      const data = await res.json();
 
-  // Set batch preload flag to prevent individual requests
-  batchPreloadInProgress = true;
-
-  try {
-    const res = await fetch("/api/batch-explain", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(toFetch),
-    });
-    const data = await res.json();
-
-    if (data.explanations) {
-      const newKeys = Object.keys(data.explanations);
-      console.log(`✅ [Client Cache] Received and cached ${newKeys.length} explanations from Gemini`);
-      for (const [key, text] of Object.entries(data.explanations)) {
-        explanationCache.set(key, text as string);
-        notifyCacheUpdate(key);
+      if (data.explanations) {
+        for (const [key, text] of Object.entries(data.explanations)) {
+          explanationCache.set(key, text as string);
+          notifyCacheUpdate(key);
+        }
+        // Persist to localStorage
+        saveCacheToStorage(explanationCache);
+      } else if (data.error && data.error.includes("429")) {
+        // Rate limit exceeded - use fallback explanations
+        for (const item of toFetch) {
+          const key = makeKey(item.symbol, item.metric);
+          const fallbackExplanation = getFallbackExplanation(
+            item.symbol,
+            item.metric,
+            item.value,
+          );
+          explanationCache.set(key, fallbackExplanation);
+          notifyCacheUpdate(key);
+        }
       }
-    } else if (data.error && data.error.includes("429")) {
-      // Rate limit exceeded - use fallback explanations
-      for (const item of items) {
-        const key = makeKey(item.symbol, item.metric);
-        const fallbackExplanation = getFallbackExplanation(
-          item.symbol,
-          item.metric,
-          item.value,
-        );
-        explanationCache.set(key, fallbackExplanation);
-        notifyCacheUpdate(key);
-      }
+    } catch (e) {
+      console.error("Batch preload error:", e);
+    } finally {
+      // Clear the pending request so future calls can proceed
+      pendingBatchRequest = null;
     }
-  } catch (e) {
-    console.error("Batch preload error:", e);
-  } finally {
-    // Reset batch preload flag
-    batchPreloadInProgress = false;
-  }
+  })();
+
+  // Wait for the request to complete
+  await pendingBatchRequest;
 }

@@ -55,25 +55,19 @@ export default function StockChart({ symbol: initialSymbol, height = 500, showCo
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [connectionStatus, setConnectionStatus] = useState("disconnected");
-	const [liveDataCount, setLiveDataCount] = useState(0);
-	const [debugInfo, setDebugInfo] = useState<string[]>([]);
-	const [historicalData, setHistoricalData] = useState<any[]>([]);
-	const [isLoadingHistorical, setIsLoadingHistorical] = useState(false);
 	const [isLoadingMoreData, setIsLoadingMoreData] = useState(false);
-	const [earliestLoadedDate, setEarliestLoadedDate] = useState<number | null>(null);
+	const [websocketEnabled, setWebsocketEnabled] = useState(true);
 	const [hasReachedDataLimit, setHasReachedDataLimit] = useState(false);
 	const [dataLimitMessage, setDataLimitMessage] = useState<string | null>(null);
-	const [websocketEnabled, setWebsocketEnabled] = useState(true);
 
-	// Use refs to access latest values in callbacks
+	// Use refs for values only needed in callbacks (no UI display)
 	const isLoadingMoreDataRef = useRef(false);
-	const earliestLoadedDateRef = useRef<number | null>(null);
+	const earliestLoadedTimestampRef = useRef<number | null>(null);
 	const selectedSymbolRef = useRef(selectedSymbol);
 	const selectedTimeframeRef = useRef(selectedTimeframe);
 	const historicalDataRef = useRef<any[]>([]);
 	const hasReachedDataLimitRef = useRef(false);
 
-	const popularSymbols = ["AAPL", "GOOGL", "MSFT", "TSLA", "AMZN", "NVDA", "META", "NFLX"];
 	const timeframes = [
 		{ value: "1Min", label: "1 Min" },
 		{ value: "5Min", label: "5 Min" },
@@ -84,13 +78,14 @@ export default function StockChart({ symbol: initialSymbol, height = 500, showCo
 		{ value: "1Month", label: "1 Month" },
 	];
 
+	// Add debug info only in development mode
 	const addDebugInfo = (message: string) => {
-		console.log(`🔍 DEBUG: ${message}`);
-		setDebugInfo((prev) => [...prev.slice(-9), `${new Date().toLocaleTimeString()}: ${message}`]);
+		if (process.env.NODE_ENV === "development") {
+			console.log(`🔍 DEBUG: ${message}`);
+		}
 	};
 
 	const loadHistoricalData = async (symbol: string, timeframe: string = selectedTimeframe) => {
-		setIsLoadingHistorical(true);
 		addDebugInfo(`Loading historical data for ${symbol} (${timeframe})...`);
 
 		// Clear existing chart data immediately to prevent timeframe mixing
@@ -99,119 +94,70 @@ export default function StockChart({ symbol: initialSymbol, height = 500, showCo
 		}
 
 		// Reset data limit state
-		setHasReachedDataLimit(false);
 		hasReachedDataLimitRef.current = false;
-		setDataLimitMessage(null);
 
 		try {
 			const response = await fetch(`/api/alpaca?symbol=${symbol}&timeframe=${timeframe}`);
 			const result = await response.json();
 
-			if (response.ok && result.data) {
-				// Sort data to ensure proper ordering
-				const sortedData = result.data.sort((a: any, b: any) => a.time - b.time);
+			if (response.ok && result.data && !result.isEmpty) {
+				historicalDataRef.current = result.data;
+				earliestLoadedTimestampRef.current = result.earliestTimestamp;
 
-				setHistoricalData(sortedData);
-				historicalDataRef.current = sortedData;
-				const earliestTime = sortedData.length > 0 ? sortedData[0].time : null;
-				setEarliestLoadedDate(earliestTime);
-				earliestLoadedDateRef.current = earliestTime;
+				addDebugInfo(`Set earliestLoadedDate to: ${result.earliestTimestamp}`);
 
-				addDebugInfo(`Set earliestLoadedDate to: ${earliestTime} (first bar time: ${sortedData[0]?.time})`);
-
-				// Show detailed info about the data loaded
-				if (result.metadata) {
-					const days = result.metadata.dateRange ? Math.round((new Date(result.metadata.dateRange.end).getTime() - new Date(result.metadata.dateRange.start).getTime()) / (1000 * 60 * 60 * 24)) : 0;
-					addDebugInfo(`Loaded ${result.data.length} bars spanning ${days} days for ${symbol}`);
-				} else {
-					addDebugInfo(`Loaded ${result.data.length} historical bars for ${symbol}`);
-				}
+				addDebugInfo(`Loaded ${result.totalBars} historical bars for ${symbol}`);
 
 				// Update chart with historical data
 				if (candlestickSeriesRef.current) {
-					candlestickSeriesRef.current.setData(sortedData);
+					candlestickSeriesRef.current.setData(result.data);
 				}
 			} else {
 				addDebugInfo(`Failed to load historical data: ${result.error}`);
-				setError(`Failed to load historical data: ${result.error}`);
+				setError(result.error);
 			}
 		} catch (error) {
 			addDebugInfo(`Error loading historical data: ${error}`);
-			setError(`Error loading historical data: ${error}`);
-		} finally {
-			setIsLoadingHistorical(false);
+			setError("Internal server error");
 		}
 	};
 
 	const loadMoreHistoricalData = async () => {
 		const symbol = selectedSymbolRef.current;
 		const timeframe = selectedTimeframeRef.current;
-		const earliestDate = earliestLoadedDateRef.current;
-		const isLoading = isLoadingMoreDataRef.current;
+		const earliestDate = earliestLoadedTimestampRef.current;
 
-		addDebugInfo(`loadMoreHistoricalData called - earliestDate=${earliestDate}, isLoading=${isLoading}`);
-
-		if (!earliestDate || isLoading) {
-			addDebugInfo(`loadMoreHistoricalData early return - earliestDate=${earliestDate}, isLoading=${isLoading}`);
-			return;
-		}
+		if (!earliestDate || isLoadingMoreDataRef.current) return;
 
 		setIsLoadingMoreData(true);
 		isLoadingMoreDataRef.current = true;
-		addDebugInfo(`Loading more historical data for ${symbol}...`);
 
 		try {
-			// Calculate start date for more data (go back further)
-			const moreStartDate = earliestDate - 365 * 24 * 60 * 60; // 1 year before current earliest
-
-			const response = await fetch(`/api/alpaca?symbol=${symbol}&timeframe=${timeframe}&start=${moreStartDate}&end=${earliestDate}`);
+			const response = await fetch(`/api/alpaca?symbol=${symbol}&timeframe=${timeframe}&end=${earliestDate}`);
 			const result = await response.json();
 
-			addDebugInfo(`API response for more data: status=${response.ok}, dataLength=${result.data?.length}, error=${result.error}`);
+			if (response.ok && result.data && !result.isEmpty) {
+				// Filter out overlap at boundary, then prepend new data
+				const filteredNewData = result.data.filter((bar: any) => bar.time < historicalDataRef.current[0].time);
+				const combinedData = [...filteredNewData, ...historicalDataRef.current];
 
-			if (response.ok && result.data && result.data.length > 0) {
-				// Sort new data to ensure proper ordering
-				const sortedNewData = result.data.sort((a: any, b: any) => a.time - b.time);
+				historicalDataRef.current = combinedData;
+				earliestLoadedTimestampRef.current = result.earliestTimestamp;
 
-				// Combine new data with existing data
-				const existingData = historicalDataRef.current;
+				addDebugInfo(`Loaded ${filteredNewData.length} new bars, total: ${combinedData.length}`);
 
-				// Combine and sort all data to prevent ordering issues
-				const combinedData = [...sortedNewData, ...existingData].sort((a: any, b: any) => a.time - b.time);
-
-				// Remove any duplicate entries based on time
-				const uniqueData = combinedData.filter((item: any, index: number, arr: any[]) => index === 0 || item.time !== arr[index - 1].time);
-
-				// Use unique data without additional filtering
-				const continuousData = uniqueData;
-
-				// Update state
-				setHistoricalData(continuousData);
-				historicalDataRef.current = continuousData;
-				setEarliestLoadedDate(continuousData[0].time);
-				earliestLoadedDateRef.current = continuousData[0].time;
-
-				addDebugInfo(`Loading more data: Added ${sortedNewData.length} bars, total: ${continuousData.length} (filtered ${combinedData.length - continuousData.length} gaps/duplicates)`);
-
-				// Update chart with properly sorted data
 				if (candlestickSeriesRef.current) {
-					candlestickSeriesRef.current.setData(continuousData);
+					candlestickSeriesRef.current.setData(combinedData);
 				}
-
-				addDebugInfo(`Loaded ${result.data.length} additional bars for ${symbol}`);
 			} else {
-				// No more data available - we've reached the limit
-				setHasReachedDataLimit(true);
 				hasReachedDataLimitRef.current = true;
+				setHasReachedDataLimit(true);
 
 				// Calculate how far back we've gone
-				const earliestTime = earliestLoadedDateRef.current;
-				if (earliestTime) {
-					const earliestDate = new Date(earliestTime * 1000);
-					const yearsBack = Math.round((Date.now() - earliestTime * 1000) / (365 * 24 * 60 * 60 * 1000));
-					setDataLimitMessage(`📅 Reached data limit: ${earliestDate.toLocaleDateString()} (${yearsBack} years ago)`);
-				} else {
-					setDataLimitMessage(`📅 Reached data limit for ${symbol}`);
+				if (earliestLoadedTimestampRef.current) {
+					const earliestDate = new Date(earliestLoadedTimestampRef.current * 1000);
+					const yearsBack = Math.round((Date.now() - earliestDate.getTime()) / (365 * 24 * 60 * 60 * 1000));
+					setDataLimitMessage(`Reached data limit: ${earliestDate.toLocaleDateString()} (${yearsBack} years ago)`);
 				}
 
 				addDebugInfo(`No more historical data available for ${symbol} - reached data limit`);
@@ -288,11 +234,11 @@ export default function StockChart({ symbol: initialSymbol, height = 500, showCo
 			if (rangeChangeTimeout) clearTimeout(rangeChangeTimeout);
 
 			rangeChangeTimeout = setTimeout(() => {
-				if (logicalRange && earliestLoadedDateRef.current && !isLoadingMoreDataRef.current && !hasReachedDataLimitRef.current) {
+				if (logicalRange && earliestLoadedTimestampRef.current && !isLoadingMoreDataRef.current && !hasReachedDataLimitRef.current) {
 					// Only trigger if user has actually scrolled to the beginning (not initial load)
 					// And ensure we have sufficient data already loaded to avoid immediate trigger
 					if (logicalRange.from !== null && logicalRange.from <= 3 && historicalDataRef.current.length > 50) {
-						addDebugInfo(`Triggering loadMoreHistoricalData - logicalRange.from=${logicalRange.from} <= 3, dataLength=${historicalDataRef.current.length}`);
+						addDebugInfo(`Triggering loadMoreHistoricalData: From=${earliestLoadedTimestampRef.current}, timeframe=${selectedTimeframeRef.current}`);
 						loadMoreHistoricalData();
 					}
 				}
@@ -377,7 +323,6 @@ export default function StockChart({ symbol: initialSymbol, height = 500, showCo
 					if (candlestickSeriesRef.current && selectedTimeframeRef.current === "1Min") {
 						// Update the chart with live data
 						candlestickSeriesRef.current.update(data);
-						setLiveDataCount((prev) => prev + 1);
 						addDebugInfo(`📈 Updated chart with live data (1Min timeframe)`);
 					} else if (selectedTimeframeRef.current !== "1Min") {
 						addDebugInfo(`📊 Ignoring live data - timeframe is ${selectedTimeframeRef.current} (not 1Min)`);
@@ -440,25 +385,16 @@ export default function StockChart({ symbol: initialSymbol, height = 500, showCo
 		selectedTimeframeRef.current = selectedTimeframe;
 	}, [selectedTimeframe]);
 
+	// Handle symbol changes (data loading only) - timeframe changes are handled by onClick
 	useEffect(() => {
-		hasReachedDataLimitRef.current = hasReachedDataLimit;
-	}, [hasReachedDataLimit]);
-
-	// Handle symbol and timeframe changes (data loading only)
-	useEffect(() => {
-		// Reset data state when symbol or timeframe changes
-		setHistoricalData([]);
+		// Reset data state when symbol changes
 		historicalDataRef.current = [];
-		setEarliestLoadedDate(null);
-		earliestLoadedDateRef.current = null;
-		setLiveDataCount(0);
-		setHasReachedDataLimit(false);
+		earliestLoadedTimestampRef.current = null;
 		hasReachedDataLimitRef.current = false;
-		setDataLimitMessage(null);
 
-		// Load historical data for new symbol/timeframe
-		loadHistoricalData(selectedSymbol);
-	}, [selectedSymbol, selectedTimeframe]);
+		// Load historical data for new symbol
+		loadHistoricalData(selectedSymbol, selectedTimeframe);
+	}, [selectedSymbol]); // Only trigger on symbol change, not timeframe
 
 	// Handle WebSocket subscriptions separately
 	useEffect(() => {
@@ -466,7 +402,6 @@ export default function StockChart({ symbol: initialSymbol, height = 500, showCo
 		if (websocketEnabled && socket && socket.connected) {
 			addDebugInfo(`Subscribing to symbol: ${selectedSymbol}`);
 			socket.emit("subscribe", { symbol: selectedSymbol });
-			setLiveDataCount(0); // Reset counter for new symbol
 		} else {
 			if (!websocketEnabled) {
 				addDebugInfo(`WebSocket disabled - using historical data only for ${selectedSymbol}`);
@@ -495,13 +430,10 @@ export default function StockChart({ symbol: initialSymbol, height = 500, showCo
 									key={timeframe.value}
 									onClick={() => {
 										// Clear all data states before switching timeframe
-										setHistoricalData([]);
 										historicalDataRef.current = [];
-										setEarliestLoadedDate(null);
-										earliestLoadedDateRef.current = null;
-										setLiveDataCount(0);
-										setHasReachedDataLimit(false);
+										earliestLoadedTimestampRef.current = null;
 										hasReachedDataLimitRef.current = false;
+										setHasReachedDataLimit(false);
 										setDataLimitMessage(null);
 
 										// Clear chart immediately
@@ -523,9 +455,8 @@ export default function StockChart({ symbol: initialSymbol, height = 500, showCo
 
 				{error && (
 					<div className="mx-4 mt-4 p-4 bg-destructive/10 border border-destructive/20 rounded-md">
-						<p className="text-destructive font-semibold">Error:</p>
-						<p className="text-destructive">{error}</p>
-						<p className="text-xs text-destructive/70 mt-2">Chart will continue to work with historical data only.</p>
+						<p className="text-destructive font-semibold">Failed to load historical data.</p>
+						<p className="text-destructive">Error: {error}</p>
 					</div>
 				)}
 
@@ -539,7 +470,7 @@ export default function StockChart({ symbol: initialSymbol, height = 500, showCo
 						</div>
 					)}
 
-					{/* Data Limit Indicator */}
+					{/* Data Limit Reached Indicator */}
 					{hasReachedDataLimit && dataLimitMessage && (
 						<div className="absolute top-8 left-8 z-20 bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 px-4 py-2 rounded-lg shadow-lg max-w-xs">
 							<div className="flex items-center space-x-2">
