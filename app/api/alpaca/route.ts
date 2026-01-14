@@ -102,10 +102,10 @@ export async function GET(request: NextRequest) {
     let pageToken: string | undefined = undefined;
     let totalFetched = 0;
 
+    console.log(`📊 Fetching stock bars for ${symbol} from ${startDate.toLocaleString()} to ${endDate.toLocaleString()}`);
+
     if (type === "crypto") {
       // Use getCryptoBars for crypto symbols
-      console.log(`📊 Fetching crypto bars for ${symbol} from ${startDate.toLocaleString()} to ${endDate.toLocaleString()}`);
-      
       const barsResponse = await alpaca.getCryptoBars([symbol.toUpperCase()], {
         start: startDate,
         end: endDate,
@@ -141,7 +141,6 @@ export async function GET(request: NextRequest) {
     } else {
       // Use getBarsV2 for stock symbols (existing logic)
       do {
-        console.log(`📊 Fetching stock bars for ${symbol} from ${startDate.toLocaleString()} to ${endDate.toLocaleString()}`);
         const barsResponse = await alpaca.getBarsV2(symbol.toUpperCase(), {
           start: startDate,
           end: endDate,

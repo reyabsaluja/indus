@@ -8,9 +8,18 @@ let alpacaService: AlpacaService | null = null;
 let alpacaReady = false;
 let alpacaConnectionPromise: Promise<void> | null = null;
 
+interface BarData {
+  time: number; // Unix timestamp in seconds
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number;
+}
+
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   // Access the underlying HTTP server with Socket.IO extension
-  const httpServer = (res.socket as any)?.server as HTTPServer & { io?: Server };
+  const httpServer = (res.socket as { server?: HTTPServer & { io?: Server } })?.server as HTTPServer & { io?: Server };
   
   if (!httpServer.io) {
     console.log("🔌 Starting Socket.IO server...");
@@ -50,7 +59,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       });
 
     // Track subscriptions per client so we can clean up on disconnect
-    const clientSubscriptions = new Map<string, { symbol: string; type: string; callback: (data: any) => void }[]>();
+    const clientSubscriptions = new Map<string, { symbol: string; type: string; callback: (data: BarData) => void }[]>();
 
     // Set up Socket.io event handlers
     io.on("connection", (socket) => {
@@ -82,7 +91,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
             }
 
             // Create a callback specific to this client
-            const callback = (candlestickData: any) => {
+            const callback = (candlestickData: BarData) => {
               if (type === "crypto") {
                 socket.emit("crypto_bar", candlestickData);
               } else {

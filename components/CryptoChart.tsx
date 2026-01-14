@@ -2,9 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createChart, CandlestickSeries, IChartApi, ISeriesApi } from "lightweight-charts";
-import io from "socket.io-client";
+import io, { Socket } from "socket.io-client";
+import type { CandlestickData, Time } from "lightweight-charts";
 
-let socket: any;
+// Use CandlestickData from lightweight-charts for type compatibility
+type BarData = CandlestickData<Time>;
+
+let socket: Socket | null = null;
 
 // Add styles for the slider
 const sliderStyles = `
@@ -42,11 +46,10 @@ const sliderStyles = `
 interface CryptoChartProps {
 	symbol: string;
 	height?: number;
-	showControls?: boolean;
 	className?: string;
 }
 
-export default function CryptoChart({ symbol: initialSymbol, height = 500, showControls = true, className = "" }: CryptoChartProps) {
+export default function CryptoChart({ symbol: initialSymbol, height = 500, className = "" }: CryptoChartProps) {
 	const chartContainerRef = useRef<HTMLDivElement>(null);
 	const chartRef = useRef<IChartApi | null>(null);
 	const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -55,11 +58,7 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [connectionStatus, setConnectionStatus] = useState("disconnected");
-	const [liveDataCount, setLiveDataCount] = useState(0);
-	const [historicalData, setHistoricalData] = useState<any[]>([]);
-	const [isLoadingHistorical, setIsLoadingHistorical] = useState(false);
 	const [isLoadingMoreData, setIsLoadingMoreData] = useState(false);
-	const [earliestLoadedDate, setEarliestLoadedDate] = useState<number | null>(null);
 	const [hasReachedDataLimit, setHasReachedDataLimit] = useState(false);
 	const [dataLimitMessage, setDataLimitMessage] = useState<string | null>(null);
 	const [websocketEnabled, setWebsocketEnabled] = useState(true);
@@ -69,7 +68,7 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 	const earliestLoadedDateRef = useRef<number | null>(null);
 	const selectedSymbolRef = useRef(selectedSymbol);
 	const selectedTimeframeRef = useRef(selectedTimeframe);
-	const historicalDataRef = useRef<any[]>([]);
+	const historicalDataRef = useRef<BarData[]>([]);
 	const hasReachedDataLimitRef = useRef(false);
 
 	const timeframes = [
@@ -90,7 +89,6 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 	};
 
 	const loadHistoricalData = async (symbol: string, timeframe: string = selectedTimeframe) => {
-		setIsLoadingHistorical(true);
 		addDebugInfo(`Loading historical crypto data for ${symbol} (${timeframe})...`);
 
 		// Clear existing chart data immediately to prevent timeframe mixing
@@ -108,13 +106,11 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 			const result = await response.json();
 
 			if (response.ok && result.data) {
-				// Sort data to ensure proper ordering
-				const sortedData = result.data.sort((a: any, b: any) => a.time - b.time);
+				// Sort data to ensure proper ordering (time is a number - Unix timestamp)
+				const sortedData = result.data.sort((a: BarData, b: BarData) => (a.time as number) - (b.time as number));
 
-				setHistoricalData(sortedData);
 				historicalDataRef.current = sortedData;
 				const earliestTime = sortedData.length > 0 ? sortedData[0].time : null;
-				setEarliestLoadedDate(earliestTime);
 				earliestLoadedDateRef.current = earliestTime;
 
 				addDebugInfo(`Set earliestLoadedDate to: ${earliestTime} (first bar time: ${sortedData[0]?.time})`);
@@ -138,8 +134,6 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 		} catch (error) {
 			addDebugInfo(`Error loading historical crypto data: ${error}`);
 			setError(`Error loading historical crypto data: ${error}`);
-		} finally {
-			setIsLoadingHistorical(false);
 		}
 	};
 
@@ -170,25 +164,23 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 			addDebugInfo(`API response for more crypto data: status=${response.ok}, dataLength=${result.data?.length}, error=${result.error}`);
 
 			if (response.ok && result.data && result.data.length > 0) {
-				// Sort new data to ensure proper ordering
-				const sortedNewData = result.data.sort((a: any, b: any) => a.time - b.time);
+				// Sort new data to ensure proper ordering (time is a number - Unix timestamp)
+				const sortedNewData = result.data.sort((a: BarData, b: BarData) => (a.time as number) - (b.time as number));
 
 				// Combine new data with existing data
 				const existingData = historicalDataRef.current;
 
 				// Combine and sort all data to prevent ordering issues
-				const combinedData = [...sortedNewData, ...existingData].sort((a: any, b: any) => a.time - b.time);
+				const combinedData = [...sortedNewData, ...existingData].sort((a: BarData, b: BarData) => (a.time as number) - (b.time as number));
 
 				// Remove any duplicate entries based on time
-				const uniqueData = combinedData.filter((item: any, index: number, arr: any[]) => index === 0 || item.time !== arr[index - 1].time);
+				const uniqueData = combinedData.filter((item: BarData, index: number, arr: BarData[]) => index === 0 || item.time !== arr[index - 1].time);
 
 				// Use unique data without additional filtering
 				const continuousData = uniqueData;
 
 				// Update state
-				setHistoricalData(continuousData);
 				historicalDataRef.current = continuousData;
-				setEarliestLoadedDate(continuousData[0].time);
 				earliestLoadedDateRef.current = continuousData[0].time;
 
 				addDebugInfo(`Loading more crypto data: Added ${sortedNewData.length} bars, total: ${continuousData.length} (filtered ${combinedData.length - continuousData.length} gaps/duplicates)`);
@@ -357,34 +349,33 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 					setConnectionStatus("disconnected");
 				});
 
-				socket.on("connect_error", (err: any) => {
+				socket.on("connect_error", (err: Error) => {
 					addDebugInfo(`🔴 Connection error: ${err.message}`);
 					setError(null); // Don't show connection errors as user errors
 					setConnectionStatus("error");
 					setWebsocketEnabled(false);
 				});
 
-				socket.on("error", (err: any) => {
+				socket.on("error", (err: Error) => {
 					addDebugInfo(`🔴 Socket error: ${err.message}`);
 					// Don't show socket errors as user errors - they're configuration issues
 					setConnectionStatus("error");
 				});
 
 				// Data events - listen for crypto_bar instead of stock_bar
-				socket.on("crypto_bar", (data: any) => {
+				socket.on("crypto_bar", (data: BarData) => {
 					addDebugInfo(`📊 Received crypto_bar data: ${JSON.stringify(data)}`);
 					// Only update chart with live data if timeframe is 1Min
 					if (candlestickSeriesRef.current && selectedTimeframeRef.current === "1Min") {
 						// Update the chart with live data
 						candlestickSeriesRef.current.update(data);
-						setLiveDataCount((prev) => prev + 1);
 						addDebugInfo(`📈 Updated chart with live crypto data (1Min timeframe)`);
 					} else if (selectedTimeframeRef.current !== "1Min") {
 						addDebugInfo(`📊 Ignoring live crypto data - timeframe is ${selectedTimeframeRef.current} (not 1Min)`);
 					}
 				});
 
-				socket.on("alpaca_error", (error: any) => {
+				socket.on("alpaca_error", (error: { message: string; error?: string }) => {
 					addDebugInfo(`🔴 Alpaca error: ${JSON.stringify(error)}`);
 					// Don't show alpaca errors as user errors - they're configuration issues
 					setWebsocketEnabled(false);
@@ -447,11 +438,8 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 	// Handle symbol changes (data loading only) - timeframe changes are handled by onClick
 	useEffect(() => {
 		// Reset data state when symbol changes
-		setHistoricalData([]);
 		historicalDataRef.current = [];
-		setEarliestLoadedDate(null);
 		earliestLoadedDateRef.current = null;
-		setLiveDataCount(0);
 		setHasReachedDataLimit(false);
 		hasReachedDataLimitRef.current = false;
 		setDataLimitMessage(null);
@@ -466,7 +454,6 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 		if (websocketEnabled && socket && socket.connected) {
 			addDebugInfo(`Subscribing to crypto symbol: ${selectedSymbol}`);
 			socket.emit("subscribe", { symbol: selectedSymbol, type: "crypto" });
-			setLiveDataCount(0); // Reset counter for new symbol
 		} else {
 			if (!websocketEnabled) {
 				addDebugInfo(`WebSocket disabled - using historical data only for ${selectedSymbol}`);
@@ -495,11 +482,8 @@ export default function CryptoChart({ symbol: initialSymbol, height = 500, showC
 									key={timeframe.value}
 									onClick={() => {
 										// Clear all data states before switching timeframe
-										setHistoricalData([]);
 										historicalDataRef.current = [];
-										setEarliestLoadedDate(null);
 										earliestLoadedDateRef.current = null;
-										setLiveDataCount(0);
 										setHasReachedDataLimit(false);
 										hasReachedDataLimitRef.current = false;
 										setDataLimitMessage(null);

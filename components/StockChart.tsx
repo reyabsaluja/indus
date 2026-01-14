@@ -1,10 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createChart, CandlestickSeries, IChartApi, ISeriesApi, CandlestickData } from "lightweight-charts";
-import io from "socket.io-client";
+import { createChart, CandlestickSeries, IChartApi, ISeriesApi } from "lightweight-charts";
+import io, { Socket } from "socket.io-client";
+import type { CandlestickData, Time } from "lightweight-charts";
 
-let socket: any;
+// Use CandlestickData from lightweight-charts for type compatibility
+type BarData = CandlestickData<Time>;
+
+let socket: Socket | null = null;
 
 // Add styles for the slider
 const sliderStyles = `
@@ -42,11 +46,10 @@ const sliderStyles = `
 interface StockChartProps {
 	symbol: string;
 	height?: number;
-	showControls?: boolean;
 	className?: string;
 }
 
-export default function StockChart({ symbol: initialSymbol, height = 500, showControls = true, className = "" }: StockChartProps) {
+export default function StockChart({ symbol: initialSymbol, height = 500, className = "" }: StockChartProps) {
 	const chartContainerRef = useRef<HTMLDivElement>(null);
 	const chartRef = useRef<IChartApi | null>(null);
 	const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -65,7 +68,7 @@ export default function StockChart({ symbol: initialSymbol, height = 500, showCo
 	const earliestLoadedTimestampRef = useRef<number | null>(null);
 	const selectedSymbolRef = useRef(selectedSymbol);
 	const selectedTimeframeRef = useRef(selectedTimeframe);
-	const historicalDataRef = useRef<any[]>([]);
+	const historicalDataRef = useRef<BarData[]>([]);
 	const hasReachedDataLimitRef = useRef(false);
 
 	const timeframes = [
@@ -138,7 +141,7 @@ export default function StockChart({ symbol: initialSymbol, height = 500, showCo
 
 			if (response.ok && result.data && !result.isEmpty) {
 				// Filter out overlap at boundary, then prepend new data
-				const filteredNewData = result.data.filter((bar: any) => bar.time < historicalDataRef.current[0].time);
+				const filteredNewData = result.data.filter((bar: BarData) => bar.time < historicalDataRef.current[0].time);
 				const combinedData = [...filteredNewData, ...historicalDataRef.current];
 
 				historicalDataRef.current = combinedData;
@@ -303,21 +306,21 @@ export default function StockChart({ symbol: initialSymbol, height = 500, showCo
 					setConnectionStatus("disconnected");
 				});
 
-				socket.on("connect_error", (err: any) => {
+				socket.on("connect_error", (err: Error) => {
 					addDebugInfo(`🔴 Connection error: ${err.message}`);
 					setError(null); // Don't show connection errors as user errors
 					setConnectionStatus("error");
 					setWebsocketEnabled(false);
 				});
 
-				socket.on("error", (err: any) => {
+				socket.on("error", (err: Error) => {
 					addDebugInfo(`🔴 Socket error: ${err.message}`);
 					// Don't show socket errors as user errors - they're configuration issues
 					setConnectionStatus("error");
 				});
 
 				// Data events
-				socket.on("stock_bar", (data: any) => {
+				socket.on("stock_bar", (data: BarData) => {
 					addDebugInfo(`📊 Received stock_bar data: ${JSON.stringify(data)}`);
 					// Only update chart with live data if timeframe is 1Min
 					if (candlestickSeriesRef.current && selectedTimeframeRef.current === "1Min") {
@@ -329,7 +332,7 @@ export default function StockChart({ symbol: initialSymbol, height = 500, showCo
 					}
 				});
 
-				socket.on("alpaca_error", (error: any) => {
+				socket.on("alpaca_error", (error: { message: string; error?: string }) => {
 					addDebugInfo(`🔴 Alpaca error: ${JSON.stringify(error)}`);
 					// Don't show alpaca errors as user errors - they're configuration issues
 					setWebsocketEnabled(false);
@@ -390,7 +393,9 @@ export default function StockChart({ symbol: initialSymbol, height = 500, showCo
 		// Reset data state when symbol changes
 		historicalDataRef.current = [];
 		earliestLoadedTimestampRef.current = null;
+		setHasReachedDataLimit(false);
 		hasReachedDataLimitRef.current = false;
+		setDataLimitMessage(null);
 
 		// Load historical data for new symbol
 		loadHistoricalData(selectedSymbol, selectedTimeframe);

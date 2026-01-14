@@ -44,13 +44,13 @@ export async function GET(request: Request) {
       shortName = quote.shortName || quote.displayName || symbol;
       longName = quote.longName || shortName;
 
-      console.log(`Yahoo Finance data for ${symbol}:`, {
-        price: currentPrice,
-        change: change,
-        changePercent: changePercent,
-        hasQuoteSummary: !!quoteSummary,
-        quoteType: quote.quoteType,
-      });
+    //   console.log(`Yahoo Finance data for ${symbol}:`, {
+    //     price: currentPrice,
+    //     change: change,
+    //     changePercent: changePercent,
+    //     hasQuoteSummary: !!quoteSummary,
+    //     quoteType: quote.quoteType,
+    //   });
     } catch (apiError) {
       console.error(`Yahoo Finance API failed for ${symbol}:`, apiError);
       return NextResponse.json(
