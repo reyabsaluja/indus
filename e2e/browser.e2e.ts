@@ -20,6 +20,12 @@ test("@browser landing page exposes the primary product path", async ({ page }) 
 	await expect(
 		page.getByText("Know what the product is showing.", { exact: true }).first(),
 	).toBeVisible();
+	await expect(
+		page.getByText("Charts, fundamentals, and AI analysis", { exact: true }),
+	).toHaveCount(0);
+	await expect(page.getByRole("link", { name: "Indus home" }).first().locator("svg")).toHaveClass(
+		/text-primary/,
+	);
 });
 
 test("@browser landing navigation scrolls between sections and returns to the top", async ({
@@ -69,6 +75,12 @@ test("@browser public pages do not overflow the viewport", async ({ page }) => {
 
 test("@browser authentication mode can be changed without a reload", async ({ page }) => {
 	await page.goto("/auth");
+	await expect(
+		page.getByText("Charts, fundamentals, and AI analysis", { exact: true }),
+	).toHaveCount(0);
+	await expect(page.getByRole("link", { name: "Indus home" }).first().locator("svg")).toHaveClass(
+		/text-primary/,
+	);
 	await page.getByRole("button", { name: "Don't have an account? Sign up" }).click();
 	await expect(page.getByRole("heading", { name: "Start your research." })).toBeVisible();
 	await expect(page.getByPlaceholder("First Name")).toBeVisible();

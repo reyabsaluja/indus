@@ -1,35 +1,15 @@
 "use client";
 
-import {
-	ArrowLeft,
-	ArrowRight,
-	Eye,
-	EyeOff,
-	Loader2,
-	Lock,
-	Mail,
-	ShieldCheck,
-	Sparkles,
-} from "lucide-react";
+import { ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, Lock, Mail, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { BrandMark } from "@/components/BrandMark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 
 type LoadingAction = "email" | "google" | null;
-
-function BrandMark() {
-	return (
-		<span className="grid size-8 grid-cols-2 gap-0.5" aria-hidden="true">
-			<span className="rounded-full bg-[#ff6b5e]" />
-			<span className="rounded-full bg-[#b7ef49]" />
-			<span className="rounded-full bg-[#33b5e5]" />
-			<span className="rounded-full bg-[#a76cf2]" />
-		</span>
-	);
-}
 
 export default function AuthPage() {
 	const [isSignUp, setIsSignUp] = useState(false);
@@ -106,16 +86,12 @@ export default function AuthPage() {
 				<div className="landing-grid pointer-events-none absolute inset-0 opacity-70" />
 				<div className="pointer-events-none absolute -left-40 top-1/3 size-[520px] rounded-full bg-primary/[0.1] blur-[130px]" />
 				<Link href="/" className="relative z-10 flex items-center gap-2.5" aria-label="Indus home">
-					<BrandMark />
+					<BrandMark className="size-8" />
 					<span className="text-lg font-bold tracking-[-0.04em]">Indus</span>
 				</Link>
 
 				<div className="relative z-10 max-w-xl">
-					<div className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/[0.07] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-primary">
-						<Sparkles className="size-3" />
-						Charts, fundamentals, and AI analysis
-					</div>
-					<h1 className="font-display mt-7 text-balance text-6xl font-medium leading-[0.96] tracking-[-0.045em] xl:text-7xl">
+					<h1 className="font-display text-balance text-6xl font-medium leading-[0.96] tracking-[-0.045em] xl:text-7xl">
 						Research companies.
 						<br />
 						<span className="italic text-primary">Keep the data together.</span>
@@ -138,7 +114,7 @@ export default function AuthPage() {
 				<div className="w-full max-w-[440px]">
 					<div className="mb-10 flex items-center justify-between lg:hidden">
 						<Link href="/" className="flex items-center gap-2.5" aria-label="Indus home">
-							<BrandMark />
+							<BrandMark className="size-8" />
 							<span className="text-lg font-bold tracking-[-0.04em]">Indus</span>
 						</Link>
 						<Button variant="ghost" size="sm" asChild className="rounded-full">

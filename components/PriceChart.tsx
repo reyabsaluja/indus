@@ -617,7 +617,7 @@ export default function PriceChart({
 						</div>
 
 						{snapshot && (
-							<dl className="hidden items-center gap-4 text-[10px] text-muted-foreground sm:flex">
+							<dl className="hidden items-center gap-4 text-xs text-muted-foreground sm:flex">
 								{[
 									["O", snapshot.open],
 									["H", snapshot.high],

@@ -186,7 +186,7 @@ test("@authenticated reports API returns only the current tenant collection", as
 
 test("@authenticated structured reports render fully and download PDF export", async ({ page }) => {
 	const reportContent = JSON.stringify({
-		version: 1,
+		version: 2,
 		executiveSummary:
 			"Apple produces consumer devices. The supplied snapshot provides current market and financial figures without a peer comparison.",
 		financialSnapshot: [
@@ -194,6 +194,16 @@ test("@authenticated structured reports render fully and download PDF export", a
 				label: "Market capitalization",
 				value: "$4.75T",
 				analysis: "This final metric explanation must remain visible.",
+			},
+		],
+		analysisAndWatchpoints: ["Track margins alongside future growth updates."],
+		recentNews: [
+			{
+				headline: "Apple announces a product update",
+				publisher: "Example News",
+				publishedAt: "2026-09-02T10:00:00.000Z",
+				url: "https://example.test/apple-update",
+				impact: "The update may affect product expectations, but the direction is uncertain.",
 			},
 		],
 		dataLimitations: ["No historical comparison was supplied."],
@@ -236,6 +246,13 @@ test("@authenticated structured reports render fully and download PDF export", a
 	await expect(page.getByRole("heading", { name: "Executive Summary" })).toBeVisible();
 	await expect(page.getByText("$4.75T")).toBeVisible();
 	await expect(page.getByText(/final metric explanation must remain visible/)).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Analysis and Watchpoints" })).toBeVisible();
+	await expect(
+		page.getByRole("heading", { name: "Recent News and Potential Impact" }),
+	).toBeVisible();
+	await expect(
+		page.getByRole("link", { name: "Apple announces a product update" }),
+	).toHaveAttribute("href", "https://example.test/apple-update");
 	await expect
 		.poll(() =>
 			page
@@ -338,6 +355,13 @@ test("@authenticated company research connects chart ranges to the analyst", asy
 	await expect(page.getByRole("heading", { name: "Apple Inc." })).toBeVisible();
 	await expect.poll(() => page.evaluate(() => window.scrollY)).toBeLessThan(2);
 	await expect(page.getByRole("region", { name: "AAPL price chart" })).toBeVisible();
+	await expect
+		.poll(() =>
+			page
+				.getByText("O", { exact: true })
+				.evaluate((element) => getComputedStyle(element).fontSize),
+		)
+		.toBe("12px");
 	await expect(page.getByText("Ask about the company.", { exact: true })).toBeVisible();
 	await expect(
 		page.getByText("Cupertino, California, United States", { exact: true }),

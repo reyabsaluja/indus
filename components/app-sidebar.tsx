@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { BrandMark } from "@/components/BrandMark";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -61,12 +62,7 @@ export function AppSidebar() {
 				<SidebarGroup>
 					<SidebarGroupLabel className="mb-5 mt-3 h-9 text-lg font-bold tracking-[-0.04em] text-sidebar-foreground">
 						<div className="flex items-center gap-2.5">
-							<span className="grid size-7 shrink-0 grid-cols-2 gap-0.5" aria-hidden="true">
-								<span className="rounded-full bg-[#ff6b5e]" />
-								<span className="rounded-full bg-[#b7ef49]" />
-								<span className="rounded-full bg-[#33b5e5]" />
-								<span className="rounded-full bg-[#a76cf2]" />
-							</span>
+							<BrandMark />
 							<span className="group-data-[collapsible=icon]:hidden">Indus</span>
 						</div>
 					</SidebarGroupLabel>

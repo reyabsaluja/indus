@@ -9,9 +9,9 @@ import {
 	Layers3,
 	LockKeyhole,
 	Search,
-	Sparkles,
 } from "lucide-react";
 import Link from "next/link";
+import { BrandMark } from "@/components/BrandMark";
 import { BackToTopButton } from "@/components/landing/BackToTopButton";
 import { Button } from "@/components/ui/button";
 
@@ -35,17 +35,6 @@ const researchSteps = [
 		description: "Ask questions about the data shown.",
 	},
 ];
-
-function BrandMark() {
-	return (
-		<span className="grid size-7 grid-cols-2 gap-0.5" aria-hidden="true">
-			<span className="rounded-full bg-[#ff6b5e]" />
-			<span className="rounded-full bg-[#b7ef49]" />
-			<span className="rounded-full bg-[#33b5e5]" />
-			<span className="rounded-full bg-[#a76cf2]" />
-		</span>
-	);
-}
 
 function ProductPreview() {
 	return (
@@ -199,11 +188,7 @@ export default function LandingPage() {
 			<main className="relative z-10">
 				<section className="mx-auto max-w-7xl px-5 pb-20 pt-20 lg:px-8 lg:pb-28 lg:pt-28">
 					<div className="mx-auto max-w-4xl text-center">
-						<div className="animate-rise-in inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/[0.07] px-3 py-1.5 text-xs font-semibold text-primary">
-							<Sparkles className="size-3.5" />
-							Charts, fundamentals, and AI analysis
-						</div>
-						<h1 className="font-display animate-rise-in mt-7 text-balance text-6xl font-medium leading-[0.92] tracking-[-0.045em] [animation-delay:60ms] md:text-8xl lg:text-[7.2rem]">
+						<h1 className="font-display animate-rise-in text-balance text-6xl font-medium leading-[0.92] tracking-[-0.045em] [animation-delay:60ms] md:text-8xl lg:text-[7.2rem]">
 							Financial intelligence,
 							<span className="block italic text-primary">in context.</span>
 						</h1>
