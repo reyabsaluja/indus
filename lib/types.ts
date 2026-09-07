@@ -84,6 +84,14 @@ export interface ReportStockData {
 	netProfitMargins?: number;
 	returnOnEquity?: number;
 	debtToEquity?: number;
+	recentNews?: ReportNewsSource[];
+}
+
+export interface ReportNewsSource {
+	headline: string;
+	publisher: string;
+	publishedAt: string;
+	url: string;
 }
 
 export interface CryptoData {

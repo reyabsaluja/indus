@@ -21,6 +21,8 @@ describe("createReportMessages", () => {
 		expect(systemInstruction).toContain("price targets");
 		expect(systemInstruction).toContain("investment recommendations");
 		expect(messages[1].parts[0].text).toContain('"regularMarketPrice":200');
+		expect(systemInstruction).toContain("potential business or market relevance");
+		expect(systemInstruction).toContain("Never claim that a headline caused a price move");
 	});
 
 	test("marks a missing provider snapshot as unavailable", () => {
@@ -49,7 +51,16 @@ describe("createReportMessages", () => {
 			regularMarketPrice: 200,
 			marketCap: 3_000_000_000_000,
 			debtToEquity: 147,
+			recentNews: [
+				{
+					headline: "Apple announces a product update",
+					publisher: "Example News",
+					publishedAt: "2026-09-02T10:00:00.000Z",
+					url: "https://example.test/apple-update",
+				},
+			],
 		});
+		expect(document.version).toBe(2);
 		expect(document.executiveSummary).toContain("Apple Inc. (AAPL)");
 		expect(document.financialSnapshot).toEqual(
 			expect.arrayContaining([
@@ -57,6 +68,12 @@ describe("createReportMessages", () => {
 				expect.objectContaining({ label: "Debt-to-equity", value: "147.0%" }),
 			]),
 		);
+		if (document.version !== 2) throw new Error("Expected current report document");
+		expect(document.recentNews[0]).toMatchObject({
+			headline: "Apple announces a product update",
+			impact: expect.stringContaining("does not establish"),
+		});
+		expect(document.analysisAndWatchpoints).not.toHaveLength(0);
 	});
 
 	test("builds a valid fallback when market data is unavailable", () => {
@@ -64,6 +81,7 @@ describe("createReportMessages", () => {
 		expect(document.financialSnapshot).toEqual([
 			expect.objectContaining({ label: "Data availability", value: "Unavailable" }),
 		]);
+		expect(document.version).toBe(2);
 	});
 });
 
@@ -94,5 +112,46 @@ describe("extractReportSummary", () => {
 			}),
 		);
 		expect(document.financialSnapshot[0].value).toBe("$200");
+	});
+
+	test("keeps news source metadata server-owned while preserving model impact analysis", () => {
+		const trustedNews = [
+			{
+				headline: "Trusted headline",
+				publisher: "Trusted Publisher",
+				publishedAt: "2026-09-02T10:00:00.000Z",
+				url: "https://example.test/trusted",
+			},
+		];
+		const document = parseGeneratedReport(
+			JSON.stringify({
+				version: 2,
+				executiveSummary:
+					"A detailed summary with enough supplied evidence to satisfy the minimum document length safely.",
+				financialSnapshot: [{ label: "Price", value: "$200", analysis: "Current supplied price." }],
+				analysisAndWatchpoints: ["Track future updates."],
+				recentNews: [
+					{
+						headline: "Model-altered headline",
+						publisher: "Untrusted Publisher",
+						publishedAt: "2026-09-01T10:00:00.000Z",
+						url: "https://example.test/trusted",
+						impact: "The headline could affect expectations, although direction is uncertain.",
+					},
+				],
+				dataLimitations: ["The snapshot has no comparison period."],
+			}),
+			trustedNews,
+		);
+
+		expect(document).toMatchObject({
+			version: 2,
+			recentNews: [
+				{
+					...trustedNews[0],
+					impact: "The headline could affect expectations, although direction is uncertain.",
+				},
+			],
+		});
 	});
 });

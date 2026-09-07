@@ -2,7 +2,7 @@ import YahooFinance from "yahoo-finance2";
 import { logger } from "@/lib/observability/logger";
 import { executeWithRetry } from "@/lib/reliability/async";
 import { ResilientCache } from "@/lib/reliability/cache";
-import type { ReportStockData } from "@/lib/types";
+import type { ReportNewsSource, ReportStockData } from "@/lib/types";
 
 interface ReportQuote {
 	symbol: string;
@@ -36,6 +36,19 @@ interface ReportStockDataProvider {
 			fiftyTwoWeekHigh?: number;
 		};
 	}>;
+	search?(
+		symbol: string,
+		options: { quotesCount: number; newsCount: number },
+		signal?: AbortSignal,
+	): Promise<{
+		news: Array<{
+			title: string;
+			publisher: string;
+			link: string;
+			providerPublishTime: Date;
+			relatedTickers?: string[];
+		}>;
+	}>;
 }
 
 const yahooFinance = new YahooFinance({
@@ -61,6 +74,8 @@ const defaultProvider: ReportStockDataProvider = {
 			},
 			{ fetchOptions: { signal } },
 		),
+	search: (symbol, options, signal) =>
+		yahooFinance.search(symbol, options, { fetchOptions: { signal } }),
 };
 
 const reportStockDataCache = new ResilientCache<ReportStockData>({
@@ -94,7 +109,16 @@ async function fetchReportStockData(
 	requestId?: string,
 	externalSignal?: AbortSignal,
 ): Promise<ReportStockDataLoad> {
-	const [quoteResult, summaryResult] = await Promise.allSettled([
+	const search = provider.search;
+	const newsRequest = search
+		? executeWithRetry(({ signal }) => search(symbol, { quotesCount: 0, newsCount: 5 }, signal), {
+				operation: "yahoo.report_news",
+				attempts: 1,
+				timeoutMs: 4_000,
+				signal: externalSignal,
+			})
+		: Promise.resolve({ news: [] });
+	const [quoteResult, summaryResult, newsResult] = await Promise.allSettled([
 		executeWithRetry(({ signal }) => provider.quote(symbol, signal), {
 			operation: "yahoo.report_quote",
 			attempts: 2,
@@ -139,6 +163,7 @@ async function fetchReportStockData(
 				},
 			},
 		),
+		newsRequest,
 	]);
 	const quote = quoteResult.status === "fulfilled" ? quoteResult.value : null;
 	const rawSummary = summaryResult.status === "fulfilled" ? summaryResult.value : null;
@@ -146,8 +171,12 @@ async function fetchReportStockData(
 		rawSummary && Object.values(rawSummary).some((value) => value !== undefined && value !== null)
 			? rawSummary
 			: null;
+	const recentNews =
+		newsResult.status === "fulfilled"
+			? normalizeRecentNews(newsResult.value?.news ?? [], symbol)
+			: [];
 
-	if (!quote && !summary) {
+	if (!quote && !summary && recentNews.length === 0) {
 		throw new AggregateError(
 			[
 				quoteResult.status === "rejected" ? quoteResult.reason : null,
@@ -157,13 +186,14 @@ async function fetchReportStockData(
 		);
 	}
 
-	const degraded = !quote || !summary;
+	const degraded = !quote || !summary || newsResult.status === "rejected";
 	if (degraded) {
 		logger.warn("report.stock_data_partial", {
 			requestId,
 			symbol,
 			quoteAvailable: Boolean(quote),
 			summaryAvailable: Boolean(summary),
+			newsAvailable: newsResult.status === "fulfilled",
 		});
 	}
 
@@ -186,8 +216,59 @@ async function fetchReportStockData(
 			netProfitMargins: summary?.financialData?.profitMargins,
 			returnOnEquity: summary?.financialData?.returnOnEquity,
 			debtToEquity: summary?.financialData?.debtToEquity,
+			recentNews,
 		},
 	};
+}
+
+function normalizeRecentNews(
+	articles: Array<{
+		title: string;
+		publisher: string;
+		link: string;
+		providerPublishTime: Date;
+		relatedTickers?: string[];
+	}>,
+	symbol: string,
+): ReportNewsSource[] {
+	const now = Date.now();
+	const oldestAllowed = now - 30 * 24 * 60 * 60 * 1_000;
+	const seenUrls = new Set<string>();
+	return articles
+		.flatMap((article) => {
+			const publishedAt = new Date(article.providerPublishTime);
+			const publishedTime = publishedAt.getTime();
+			const related = article.relatedTickers?.map((ticker) => ticker.toUpperCase());
+			let url: URL;
+			try {
+				url = new URL(article.link);
+			} catch {
+				return [];
+			}
+			if (
+				!article.title.trim() ||
+				!article.publisher.trim() ||
+				(url.protocol !== "http:" && url.protocol !== "https:") ||
+				url.toString().length > 2_048 ||
+				!Number.isFinite(publishedTime) ||
+				publishedTime < oldestAllowed ||
+				publishedTime > now + 5 * 60 * 1_000 ||
+				(related && related.length > 0 && !related.includes(symbol.toUpperCase()))
+			) {
+				return [];
+			}
+			if (seenUrls.has(url.toString())) return [];
+			seenUrls.add(url.toString());
+			return [
+				{
+					headline: article.title.trim().slice(0, 300),
+					publisher: article.publisher.trim().slice(0, 120),
+					publishedAt: publishedAt.toISOString(),
+					url: url.toString(),
+				},
+			];
+		})
+		.slice(0, 5);
 }
 
 export async function loadReportStockData(

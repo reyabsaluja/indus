@@ -23,6 +23,30 @@ describe("report document", () => {
 		expect(isCompleteReportContent(content)).toBe(true);
 	});
 
+	it("validates an in-depth report with safe recent-news sources", () => {
+		const current = {
+			...document,
+			version: 2 as const,
+			analysisAndWatchpoints: ["Track the supplied margin alongside future growth updates."],
+			recentNews: [
+				{
+					headline: "Apple announces a product update",
+					publisher: "Example News",
+					publishedAt: "2026-09-02T10:00:00.000Z",
+					url: "https://example.test/apple-update",
+					impact: "The announcement may affect product expectations, but direction is uncertain.",
+				},
+			],
+		};
+		expect(parseReportDocumentContent(serializeReportDocument(current))).toEqual(current);
+		expect(
+			reportDocumentSchema.safeParse({
+				...current,
+				recentNews: [{ ...current.recentNews[0], url: "javascript:alert(1)" }],
+			}).success,
+		).toBe(false);
+	});
+
 	it("rejects missing sections, extra fields, and presentation markup objects", () => {
 		expect(parseReportDocumentContent('{"version":1}')).toBeNull();
 		expect(reportDocumentSchema.safeParse({ ...document, markdown: "## heading" }).success).toBe(

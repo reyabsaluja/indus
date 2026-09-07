@@ -24,6 +24,9 @@ function printableText(value: string): string {
 		.replace(/[\u2018\u2019]/g, "'")
 		.replace(/[\u201c\u201d]/g, '"')
 		.replace(/[\u2013\u2014]/g, "-")
+		.replace(/£/g, "GBP ")
+		.replace(/€/g, "EUR ")
+		.replace(/¥/g, "JPY ")
 		.replace(/[^\x20-\x7E\n]/g, "?");
 }
 
@@ -200,6 +203,34 @@ export async function createReportPdf(report: PdfReport): Promise<Uint8Array> {
 				drawLines(value, { font: bold, size: 11, color: ACCENT_COLOR, gap: 4 });
 			}
 			drawLines(metric.analysis, { size: 9.8, color: MUTED_COLOR, gap: 8 });
+		}
+
+		if (document.version === 2) {
+			drawHeading("Analysis and Watchpoints");
+			for (const observation of document.analysisAndWatchpoints) {
+				drawLines(`- ${observation}`, { gap: 5 });
+			}
+
+			drawHeading("Recent News and Potential Impact");
+			if (document.recentNews.length === 0) {
+				drawLines("No recent company news was available from the report data provider.");
+			} else {
+				for (const article of document.recentNews) {
+					ensureSpace(100);
+					drawLines(article.headline, { font: bold, size: 11, gap: 3 });
+					const published = new Intl.DateTimeFormat("en-US", {
+						dateStyle: "medium",
+						timeZone: "UTC",
+					}).format(new Date(article.publishedAt));
+					drawLines(`${article.publisher} | ${published}`, {
+						size: 8.5,
+						color: MUTED_COLOR,
+						gap: 4,
+					});
+					drawLines(article.impact, { size: 9.8, gap: 3 });
+					drawLines(article.url, { size: 7.5, color: ACCENT_COLOR, gap: 12 });
+				}
+			}
 		}
 
 		ensureSpace(140);

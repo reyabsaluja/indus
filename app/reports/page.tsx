@@ -149,6 +149,60 @@ const StructuredReport = ({ document }: { document: ReportDocument }) => (
 			</dl>
 		</section>
 
+		{document.version === 2 && (
+			<>
+				<section aria-labelledby="analysis-watchpoints">
+					<h2
+						id="analysis-watchpoints"
+						className="border-b border-border pb-3 text-xl font-semibold text-foreground"
+					>
+						Analysis and Watchpoints
+					</h2>
+					<ul className="mt-5 list-disc space-y-3 pl-5 text-sm leading-6 text-muted-foreground">
+						{document.analysisAndWatchpoints.map((observation) => (
+							<li key={observation}>{observation}</li>
+						))}
+					</ul>
+				</section>
+
+				<section aria-labelledby="recent-news">
+					<h2
+						id="recent-news"
+						className="border-b border-border pb-3 text-xl font-semibold text-foreground"
+					>
+						Recent News and Potential Impact
+					</h2>
+					{document.recentNews.length > 0 ? (
+						<div className="mt-5 space-y-4">
+							{document.recentNews.map((article) => (
+								<article
+									key={`${article.url}-${article.publishedAt}`}
+									className="rounded-xl border border-border p-5"
+								>
+									<a
+										href={article.url}
+										target="_blank"
+										rel="noopener noreferrer"
+										className="font-semibold text-foreground underline decoration-border underline-offset-4 hover:decoration-primary"
+									>
+										{article.headline}
+									</a>
+									<p className="mt-2 font-mono text-xs text-muted-foreground">
+										{article.publisher} · {format(new Date(article.publishedAt), "MMM d, yyyy")}
+									</p>
+									<p className="mt-3 text-sm leading-6 text-muted-foreground">{article.impact}</p>
+								</article>
+							))}
+						</div>
+					) : (
+						<p className="mt-5 text-sm text-muted-foreground">
+							No recent company news was available from the report data provider.
+						</p>
+					)}
+				</section>
+			</>
+		)}
+
 		<section aria-labelledby="data-limitations">
 			<h2
 				id="data-limitations"

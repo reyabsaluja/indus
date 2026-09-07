@@ -54,6 +54,7 @@ describe("loadReportStockData", () => {
 			netProfitMargins: 0.2,
 			returnOnEquity: 0.3,
 			debtToEquity: 40,
+			recentNews: [],
 		});
 		expect(provider.quote).toHaveBeenCalledWith("AAPL", expect.any(AbortSignal));
 		expect(provider.quoteSummary).toHaveBeenCalledWith(
@@ -61,6 +62,55 @@ describe("loadReportStockData", () => {
 			{
 				modules: ["defaultKeyStatistics", "financialData", "summaryDetail", "assetProfile"],
 			},
+			expect.any(AbortSignal),
+		);
+	});
+
+	test("includes only recent, symbol-related news with safe source links", async () => {
+		vi.spyOn(Date, "now").mockReturnValue(new Date("2026-09-03T12:00:00.000Z").getTime());
+		const provider = {
+			quote: vi.fn().mockResolvedValue({ symbol: "AAPL", longName: "Apple Inc." }),
+			quoteSummary: vi.fn().mockResolvedValue({ summaryDetail: { trailingPE: 25 } }),
+			search: vi.fn().mockResolvedValue({
+				news: [
+					{
+						title: "Apple announces a product update",
+						publisher: "Example News",
+						link: "https://example.test/apple-update",
+						providerPublishTime: new Date("2026-09-02T10:00:00.000Z"),
+						relatedTickers: ["AAPL"],
+					},
+					{
+						title: "Unrelated company headline",
+						publisher: "Example News",
+						link: "https://example.test/unrelated",
+						providerPublishTime: new Date("2026-09-02T10:00:00.000Z"),
+						relatedTickers: ["MSFT"],
+					},
+					{
+						title: "Unsafe link",
+						publisher: "Example News",
+						link: "javascript:alert(1)",
+						providerPublishTime: new Date("2026-09-02T10:00:00.000Z"),
+						relatedTickers: ["AAPL"],
+					},
+				],
+			}),
+		};
+
+		await expect(loadReportStockData("AAPL", { provider })).resolves.toMatchObject({
+			recentNews: [
+				{
+					headline: "Apple announces a product update",
+					publisher: "Example News",
+					publishedAt: "2026-09-02T10:00:00.000Z",
+					url: "https://example.test/apple-update",
+				},
+			],
+		});
+		expect(provider.search).toHaveBeenCalledWith(
+			"AAPL",
+			{ quotesCount: 0, newsCount: 5 },
 			expect.any(AbortSignal),
 		);
 	});
@@ -85,6 +135,29 @@ describe("loadReportStockData", () => {
 
 		await expect(loadReportStockData("NVDA", { provider })).resolves.toBeNull();
 		expect(warning).toHaveBeenCalledWith(expect.stringContaining("report.stock_data_unavailable"));
+	});
+
+	test("preserves recent news when financial snapshot providers are unavailable", async () => {
+		vi.spyOn(Date, "now").mockReturnValue(new Date("2026-09-03T12:00:00.000Z").getTime());
+		const provider = {
+			quote: vi.fn().mockRejectedValue(new Error("quote unavailable")),
+			quoteSummary: vi.fn().mockRejectedValue(new Error("summary unavailable")),
+			search: vi.fn().mockResolvedValue({
+				news: [
+					{
+						title: "Apple announces a product update",
+						publisher: "Example News",
+						link: "https://example.test/apple-update",
+						providerPublishTime: new Date("2026-09-02T10:00:00.000Z"),
+						relatedTickers: ["AAPL"],
+					},
+				],
+			}),
+		};
+
+		await expect(loadReportStockData("AAPL", { provider })).resolves.toMatchObject({
+			recentNews: [expect.objectContaining({ headline: "Apple announces a product update" })],
+		});
 	});
 
 	test("returns the available quote when summary retrieval fails", async () => {

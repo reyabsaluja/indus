@@ -44,6 +44,25 @@ describe("report PDF", () => {
 		expect(pdf.getPageCount()).toBeGreaterThan(1);
 	});
 
+	it("renders analysis and recent-news sections in current reports", async () => {
+		const current = JSON.parse(baseReport.content);
+		current.version = 2;
+		current.analysisAndWatchpoints = ["Track future margin and growth updates together."];
+		current.recentNews = [
+			{
+				headline: "Apple announces a product update",
+				publisher: "Example News",
+				publishedAt: "2026-09-02T10:00:00.000Z",
+				url: "https://example.test/apple-update",
+				impact: "The headline may affect expectations, but the direction remains uncertain.",
+			},
+		];
+		const pdf = await PDFDocument.load(
+			await createReportPdf({ ...baseReport, content: JSON.stringify(current) }),
+		);
+		expect(pdf.getPageCount()).toBeGreaterThan(0);
+	});
+
 	it("creates a predictable filesystem-safe filename", () => {
 		expect(reportPdfFilename("BTC/USD", baseReport.createdAt)).toBe(
 			"BTC-USD-research-report-2026-09-03.pdf",

@@ -90,7 +90,7 @@ export async function POST(request: Request) {
 				REPORT_GENERATION_CONFIG,
 				{ signal: request.signal, requestId: requestLog.requestId },
 			);
-			reportDocument = parseGeneratedReport(generatedContent);
+			reportDocument = parseGeneratedReport(generatedContent, stockData?.recentNews);
 		} catch (error) {
 			if (request.signal.aborted) throw error;
 			logger.warn("report.provider_fallback", {
