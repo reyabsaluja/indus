@@ -5,7 +5,7 @@ export type ReportBlock =
 	| { kind: "paragraph"; text: string }
 	| { kind: "list"; items: string[] };
 
-export const REPORT_DISCLAIMER = "This report is educational and is not investment advice.";
+const REPORT_DISCLAIMER = "This report is educational and is not investment advice.";
 export const MAX_REPORT_CONTENT_LENGTH = 100_000;
 
 const REQUIRED_REPORT_HEADINGS = [

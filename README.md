@@ -81,6 +81,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 | `bun run test:integration` | Run local HTTP and auth-boundary integration tests |
 | `bun run test:browser` | Run desktop and mobile cross-browser checks |
 | `bun run test:accessibility` | Run WCAG A/AA accessibility checks |
+| `bun run test:authenticated` | Run authenticated product and accessibility checks against an isolated local Supabase stack |
 | `bun run test:performance` | Run production-mode local performance budgets |
 | `bun run test:local` | Run the complete local quality sequence |
 

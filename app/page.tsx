@@ -1,7 +1,6 @@
 import {
 	ArrowRight,
 	BrainCircuit,
-	ChartNoAxesCombined,
 	Check,
 	ChevronRight,
 	CircleGauge,
@@ -188,9 +187,11 @@ export default function LandingPage() {
 			<main className="relative z-10">
 				<section className="mx-auto max-w-7xl px-5 pb-20 pt-20 lg:px-8 lg:pb-28 lg:pt-28">
 					<div className="mx-auto max-w-4xl text-center">
-						<h1 className="font-display animate-rise-in text-balance text-6xl font-medium leading-[0.92] tracking-[-0.045em] [animation-delay:60ms] md:text-8xl lg:text-[7.2rem]">
-							Financial intelligence,
-							<span className="block italic text-primary">in context.</span>
+						<h1
+							aria-label="Financial intelligence, in context."
+							className="font-display animate-rise-in text-balance text-6xl font-medium leading-[0.92] tracking-[-0.045em] [animation-delay:60ms] md:text-8xl lg:text-[7.2rem]"
+						>
+							Financial intelligence, <span className="block italic text-primary">in context.</span>
 						</h1>
 						<p className="animate-rise-in mx-auto mt-7 max-w-2xl text-balance text-base leading-7 text-muted-foreground [animation-delay:120ms] md:text-lg">
 							Live price action, durable company fundamentals, and AI analytics all in{" "}
@@ -304,24 +305,6 @@ export default function LandingPage() {
 								<p className="mt-3 text-sm leading-6 text-muted-foreground">{principle.copy}</p>
 							</div>
 						))}
-					</div>
-				</section>
-
-				<section className="border-t border-border/70 px-5 py-20 lg:px-8 lg:py-28">
-					<div className="relative mx-auto max-w-7xl overflow-hidden rounded-[2rem] border border-primary/25 bg-primary/[0.075] px-6 py-14 text-center md:px-12 md:py-20">
-						<ChartNoAxesCombined className="mx-auto size-7 text-primary" />
-						<h2 className="font-display mx-auto mt-5 max-w-3xl text-balance text-4xl font-medium leading-[1.03] tracking-[-0.035em] md:text-6xl">
-							Review a company in one place.
-						</h2>
-						<p className="mx-auto mt-5 max-w-xl text-sm leading-6 text-muted-foreground">
-							Open the chart, compare the fundamentals, and ask follow-up questions.
-						</p>
-						<Button size="lg" asChild className="mt-8 h-12 rounded-full px-7">
-							<Link href="/auth">
-								Open your workspace
-								<ArrowRight className="size-4" />
-							</Link>
-						</Button>
 					</div>
 				</section>
 			</main>

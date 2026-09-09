@@ -8,7 +8,6 @@ export const CHART_RANGES = [
 ] as const;
 
 export type ChartRangeValue = (typeof CHART_RANGES)[number]["value"];
-export type ChartTimeframe = (typeof CHART_RANGES)[number]["timeframe"];
 
 export function getChartRange(value: ChartRangeValue) {
 	return CHART_RANGES.find((range) => range.value === value) ?? CHART_RANGES[0];

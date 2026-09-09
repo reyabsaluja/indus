@@ -30,7 +30,9 @@ export const metadata: Metadata = {
 	description:
 		"Research public companies with live market charts, durable financial context, and AI analytics that work from the data in view.",
 	icons: {
-		icon: "/favicon.ico",
+		icon: [{ url: "/indus-water.svg", type: "image/svg+xml" }],
+		shortcut: "/indus-water.svg",
+		apple: "/logo.png",
 	},
 	openGraph: {
 		title: "Indus | Financial intelligence, in context",

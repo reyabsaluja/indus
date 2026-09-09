@@ -153,18 +153,6 @@ export const reportIdSchema = z.object({
 	id: z.uuid(),
 });
 
-export const geminiTextResponseSchema = z.object({
-	candidates: z
-		.array(
-			z.object({
-				content: z.object({
-					parts: z.array(z.object({ text: z.string() })).min(1),
-				}),
-			}),
-		)
-		.min(1),
-});
-
 export const valueAnalysisSchema = z
 	.object({
 		metric_display: z.string().trim().min(1).max(240),

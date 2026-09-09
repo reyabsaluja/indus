@@ -5,15 +5,10 @@ test("@browser landing page exposes the primary product path", async ({ page }) 
 	await expect(
 		page.getByRole("heading", { name: /Financial intelligence, in context/ }),
 	).toBeVisible();
-	for (const name of [
-		"Sign in",
-		"Open Indus",
-		"Start researching",
-		"Explore an example",
-		"Open your workspace",
-	]) {
+	for (const name of ["Sign in", "Open Indus", "Start researching", "Explore an example"]) {
 		await expect(page.getByRole("link", { name })).toHaveAttribute("href", "/auth");
 	}
+	await expect(page.getByText("Review a company in one place.", { exact: true })).toHaveCount(0);
 	await expect(
 		page.getByText("Research a company without switching tools.", { exact: true }).first(),
 	).toBeVisible();
@@ -23,9 +18,10 @@ test("@browser landing page exposes the primary product path", async ({ page }) 
 	await expect(
 		page.getByText("Charts, fundamentals, and AI analysis", { exact: true }),
 	).toHaveCount(0);
-	await expect(page.getByRole("link", { name: "Indus home" }).first().locator("svg")).toHaveClass(
-		/text-primary/,
-	);
+	await expect(
+		page.getByRole("link", { name: "Indus home" }).first().locator('img[src*="indus-water"]'),
+	).toBeVisible();
+	await expect(page.locator('link[rel="icon"][href*="indus-water.svg"]')).toHaveCount(1);
 });
 
 test("@browser landing navigation scrolls between sections and returns to the top", async ({
@@ -78,9 +74,9 @@ test("@browser authentication mode can be changed without a reload", async ({ pa
 	await expect(
 		page.getByText("Charts, fundamentals, and AI analysis", { exact: true }),
 	).toHaveCount(0);
-	await expect(page.getByRole("link", { name: "Indus home" }).first().locator("svg")).toHaveClass(
-		/text-primary/,
-	);
+	await expect(
+		page.getByRole("link", { name: "Indus home" }).first().locator('img[src*="indus-water"]'),
+	).toBeVisible();
 	await page.getByRole("button", { name: "Don't have an account? Sign up" }).click();
 	await expect(page.getByRole("heading", { name: "Start your research." })).toBeVisible();
 	await expect(page.getByPlaceholder("First Name")).toBeVisible();

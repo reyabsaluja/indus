@@ -69,7 +69,7 @@ bunx supabase --version
 | Integration | `bun run test:integration` | Public navigation, auth redirects, and HTTP boundary behavior |
 | Browser | `bun run test:browser` | Chromium, Firefox, WebKit, and mobile Chromium product paths |
 | Accessibility | `bun run test:accessibility` | WCAG A/AA serious and critical violations on public pages |
-| Authenticated browser | `bun run test:authenticated` | Real local sign-in, protected product routes, tenant API access, and authenticated WCAG checks |
+| Authenticated browser | `bun run test:authenticated` | Real local sign-in, protected product routes, tenant API access, and authenticated WCAG checks against a serial, isolated Supabase stack |
 | Performance | `bun run test:performance` | Production-mode navigation and JavaScript transfer budgets |
 
 ## Reliability-first development

@@ -1,18 +1,3 @@
-export type Item = {
-	symbol: string;
-	metric: string;
-	value: number;
-};
-
-export type StructuredExplanation = {
-	metric_display: string;
-	definition: string;
-	explanation: string;
-	insight: string;
-	learn_more_url: string;
-	evaluation?: "green" | "red" | "neutral" | "amber";
-};
-
 export type MetricDefinition = {
 	metric_display: string;
 	definition: string;
@@ -131,7 +116,7 @@ export interface CryptoData {
 	fiftyTwoWeekLow?: number;
 }
 
-export interface ChartPoint {
+interface ChartPoint {
 	t: number;
 	o: number;
 	h: number;

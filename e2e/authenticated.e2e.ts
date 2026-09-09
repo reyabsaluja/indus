@@ -423,10 +423,8 @@ test("@authenticated company research connects chart ranges to the analyst", asy
 	await expect(page.getByText("Oldest available data reached", { exact: true })).toBeVisible();
 });
 
-test("@authenticated critical product routes have no serious accessibility violations", async ({
-	page,
-}) => {
-	for (const path of ["/dashboard", "/crypto", "/reports", "/search", "/settings"]) {
+for (const path of ["/dashboard", "/crypto", "/reports", "/search", "/settings"]) {
+	test(`@authenticated ${path} has no serious accessibility violations`, async ({ page }) => {
 		await page.goto(path);
 		await expect(page).toHaveTitle(/Indus/);
 		const results = await new AxeBuilder({ page })
@@ -437,5 +435,5 @@ test("@authenticated critical product routes have no serious accessibility viola
 		);
 
 		expect(seriousViolations, `${path} accessibility violations`).toEqual([]);
-	}
-});
+	});
+}
