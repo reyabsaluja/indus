@@ -1,0 +1,139 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: market-data
+  labels:
+    {{- include "indus.labels" . | nindent 4 }}
+    app.kubernetes.io/name: market-data
+spec:
+  replicas: {{ .Values.marketData.replicas }}
+  revisionHistoryLimit: 5
+  minReadySeconds: 15
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector:
+    matchLabels:
+      {{- include "indus.selectorLabels" (dict "root" . "name" "market-data") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "indus.selectorLabels" (dict "root" . "name" "market-data") | nindent 8 }}
+        {{- include "indus.labels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ toJson .Values.config | sha256sum }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8081"
+        prometheus.io/path: /metrics
+    spec:
+      serviceAccountName: market-data
+      terminationGracePeriodSeconds: 90
+      securityContext:
+        {{- include "indus.podSecurityContext" . | nindent 8 }}
+      topologySpreadConstraints:
+        {{- include "indus.spread" (dict "root" . "name" "market-data") | nindent 8 }}
+      containers:
+        - name: market-data
+          image: {{ .Values.images.marketData | quote }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 8081, protocol: TCP }
+          envFrom:
+            - secretRef: { name: market-data-runtime }
+          env:
+            - { name: MARKET_BIND_ADDR, value: "0.0.0.0:8081" }
+            - { name: MARKET_JWT_ISSUER, value: {{ .Values.identity.issuer | quote }} }
+            - { name: MARKET_JWT_AUDIENCE, value: {{ .Values.identity.audience | quote }} }
+            - { name: MARKET_JWKS_URL, value: {{ printf "%s/.well-known/jwks.json" .Values.identity.issuer | quote }} }
+            - { name: MARKET_SYMBOLS, value: {{ .Values.marketData.symbols | quote }} }
+            - { name: MARKET_INGESTION_ENABLED, value: {{ .Values.marketData.ingestionEnabled | quote }} }
+            - { name: MARKET_STALE_AFTER_SECONDS, value: "30" }
+            - { name: MARKET_STREAM_BUFFER, value: "256" }
+            - { name: MARKET_MAX_STREAMS_PER_USER, value: "8" }
+            - { name: MARKET_MAX_STREAMS_GLOBAL, value: "10000" }
+            - { name: MARKET_RETENTION_DAYS, value: "90" }
+            - { name: KAFKA_BOOTSTRAP_SERVERS, value: {{ .Values.config.mskBootstrapBrokers | quote }} }
+            - { name: KAFKA_TRANSACTIONAL_ID, value: {{ printf "market-data-%s" .Values.environment | quote }} }
+            - { name: KAFKA_GROUP_ID, value: {{ printf "market-data-%s" .Values.environment | quote }} }
+            - { name: KAFKA_SECURITY_PROTOCOL, value: "SASL_SSL" }
+            - { name: KAFKA_SASL_MECHANISM, value: "OAUTHBEARER" }
+            - { name: AWS_REGION, value: {{ .Values.aws.region | quote }} }
+            - { name: RAW_EVENTS_BUCKET, value: {{ .Values.config.rawEventsBucket | quote }} }
+            - { name: OTEL_SERVICE_NAME, value: "market-data" }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otel-collector.observability.svc.cluster.local:4317" }
+          resources:
+            {{- toYaml .Values.marketData.resources | nindent 12 }}
+          securityContext:
+            {{- include "indus.containerSecurityContext" . | nindent 12 }}
+          startupProbe:
+            httpGet: { path: /health/live, port: http }
+            failureThreshold: 30
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health/live, port: http }
+            periodSeconds: 15
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+          lifecycle:
+            preStop:
+              exec: { command: ["/bin/sh", "-c", "sleep 20"] }
+          volumeMounts:
+            - { name: runtime-secret, mountPath: /mnt/secrets-store, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: runtime-secret
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes: { secretProviderClass: market-data }
+        - name: tmp
+          emptyDir: { sizeLimit: 1Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: market-data
+  labels:
+    {{- include "indus.labels" . | nindent 4 }}
+    app.kubernetes.io/name: market-data
+spec:
+  selector:
+    {{- include "indus.selectorLabels" (dict "root" . "name" "market-data") | nindent 4 }}
+  ports:
+    - { name: http, port: 8081, targetPort: http, protocol: TCP }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: market-data }
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "indus.selectorLabels" (dict "root" . "name" "market-data") | nindent 6 }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: market-data }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: market-data }
+  minReplicas: {{ .Values.marketData.minReplicas }}
+  maxReplicas: {{ .Values.marketData.maxReplicas }}
+  behavior:
+    scaleDown: { stabilizationWindowSeconds: 600 }
+    scaleUp: { stabilizationWindowSeconds: 30 }
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 65 }
+---
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata: { name: market-data }
+spec:
+  serviceRef: { name: market-data, port: http }
+  targetGroupARN: {{ .Values.aws.targetGroups.marketData | quote }}
+  targetType: ip

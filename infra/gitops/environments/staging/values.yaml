@@ -1,0 +1,43 @@
+environment: staging
+aws:
+  region: ca-central-1
+  vpcCidr: 10.30.0.0/16
+  webBucket: indus-staging-web-333333333333
+  cloudfrontDistributionId: replace-staging
+  targetGroups:
+    platformApi: arn:aws:elasticloadbalancing:ca-central-1:333333333333:targetgroup/replace-api/0000000000000000
+    marketData: arn:aws:elasticloadbalancing:ca-central-1:333333333333:targetgroup/replace-stream/0000000000000000
+identity: { issuer: "https://cognito-idp.ca-central-1.amazonaws.com/replace-staging", audience: replace-staging }
+roles:
+  platformApi: arn:aws:iam::333333333333:role/indus-staging-platform-api
+  sidekiq: arn:aws:iam::333333333333:role/indus-staging-sidekiq
+  platformOutbox: arn:aws:iam::333333333333:role/indus-staging-platform-outbox
+  reportsConsumer: arn:aws:iam::333333333333:role/indus-staging-reports-consumer
+  marketData: arn:aws:iam::333333333333:role/indus-staging-market-data
+  researchWorker: arn:aws:iam::333333333333:role/indus-staging-research-worker
+  databaseMigrator: arn:aws:iam::333333333333:role/indus-staging-database-migrator
+  webPublisher: arn:aws:iam::333333333333:role/indus-staging-web-publisher
+secrets:
+  platformApi: arn:aws:secretsmanager:ca-central-1:333333333333:secret:indus-staging/platform-api
+  marketData: arn:aws:secretsmanager:ca-central-1:333333333333:secret:indus-staging/market-data
+  researchWorker: arn:aws:secretsmanager:ca-central-1:333333333333:secret:indus-staging/research-worker
+  databaseMigration: arn:aws:secretsmanager:ca-central-1:333333333333:secret:indus-staging/database-migration
+config:
+  rdsProxyEndpoint: replace-staging.proxy.ca-central-1.rds.amazonaws.com
+  redisEndpoint: replace-staging.serverless.cac1.cache.amazonaws.com
+  redisPort: 6379
+  redisCacheName: indus-staging
+  redisUser: indus-staging-app
+  mskBootstrapBrokers: replace-staging.kafka-serverless.ca-central-1.amazonaws.com:9098
+  artifactBucket: indus-staging-artifacts-333333333333
+  rawEventsBucket: indus-staging-raw-events-333333333333
+  temporalAddress: replace.tmprl.cloud:7233
+  temporalNamespace: staging.indus
+images:
+  platformApi: 111111111111.dkr.ecr.us-east-1.amazonaws.com/indus/platform-api@sha256:0000000000000000000000000000000000000000000000000000000000000000
+  marketData: 111111111111.dkr.ecr.us-east-1.amazonaws.com/indus/market-data@sha256:0000000000000000000000000000000000000000000000000000000000000000
+  researchWorker: 111111111111.dkr.ecr.us-east-1.amazonaws.com/indus/research-worker@sha256:0000000000000000000000000000000000000000000000000000000000000000
+  web: 111111111111.dkr.ecr.us-east-1.amazonaws.com/indus/web@sha256:0000000000000000000000000000000000000000000000000000000000000000
+webPublisher: { releaseId: "0000000000000000000000000000000000000000" }
+platformApi: { replicas: 3, minReplicas: 3, maxReplicas: 10 }
+marketData: { replicas: 3, minReplicas: 3, maxReplicas: 12 }

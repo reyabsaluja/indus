@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: indus
+  namespace: argocd
+spec:
+  description: Indus workloads and required managed add-ons
+  sourceRepos:
+    - {{ .Values.repository | quote }}
+    - https://aws.github.io/eks-charts
+    - https://kubernetes-sigs.github.io/metrics-server
+    - https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
+    - https://aws.github.io/secrets-store-csi-driver-provider-aws
+    - https://open-telemetry.github.io/opentelemetry-helm-charts
+  destinations:
+    - { namespace: indus, server: "https://kubernetes.default.svc" }
+    - { namespace: kube-system, server: "https://kubernetes.default.svc" }
+    - { namespace: observability, server: "https://kubernetes.default.svc" }
+    - { namespace: "", server: "https://kubernetes.default.svc" }
+  clusterResourceWhitelist:
+    - { group: admissionregistration.k8s.io, kind: ValidatingAdmissionPolicy }
+    - { group: admissionregistration.k8s.io, kind: ValidatingAdmissionPolicyBinding }
+    - { group: apiextensions.k8s.io, kind: CustomResourceDefinition }
+    - { group: rbac.authorization.k8s.io, kind: ClusterRole }
+    - { group: rbac.authorization.k8s.io, kind: ClusterRoleBinding }
+    - { group: "", kind: Namespace }
+  namespaceResourceWhitelist:
+    - { group: "*", kind: "*" }
+  orphanedResources: { warn: true }
