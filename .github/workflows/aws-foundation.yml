@@ -1,0 +1,63 @@
+name: AWS foundation verification
+
+on:
+  pull_request:
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - next.config.ts
+      - infra/**
+      - docs/runbooks/aws-legacy-next.md
+      - .github/workflows/aws-foundation.yml
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - next.config.ts
+      - infra/**
+      - docs/runbooks/aws-legacy-next.md
+      - .github/workflows/aws-foundation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  foundation:
+    name: Terraform, Helm, and legacy container
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Validate Terraform formatting and environments
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='hashicorp/terraform@sha256:6bbb82d575aa7bd4f0a2c6e3a0838ab9590426c08a71d7a2783643f01004d356'
+          docker run --rm --volume "$PWD:/workspace:ro" --workdir /workspace "$image" fmt -check -recursive infra/terraform
+          for environment in development staging production; do
+            docker run --rm --entrypoint /bin/sh --env TF_DATA_DIR=/tmp/terraform-data \
+              --volume "$PWD:/workspace" --workdir "/workspace/infra/terraform/environments/$environment" "$image" \
+              -ec 'terraform init -backend=false -input=false && terraform validate'
+          done
+
+      - name: Render Helm workloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='alpine/helm:3.19.0'
+          for chart in infra/helm/indus-applications infra/helm/indus-platform infra/helm/indus-legacy-next; do
+            docker run --rm --volume "$PWD:/workspace:ro" --workdir /workspace "$image" lint "$chart"
+            docker run --rm --volume "$PWD:/workspace:ro" --workdir /workspace "$image" template indus "$chart" >/dev/null
+          done
+
+      - name: Build the current application container
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co \
+            --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-public-anon-key \
+            --tag indus-legacy-next:ci \
+            .
