@@ -1,4 +1,4 @@
-export const AI_FUNCTIONS = ["batch-explain", "context-chat", "generate-report"] as const;
+const AI_FUNCTIONS = ["batch-explain", "context-chat", "generate-report"] as const;
 
 export type AiFunctionName = (typeof AI_FUNCTIONS)[number];
 

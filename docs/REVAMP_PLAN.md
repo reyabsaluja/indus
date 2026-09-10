@@ -271,7 +271,7 @@ Acceptance criteria:
 
 - The complete replacement product runs locally without production credentials and passes end-to-end verification.
 - Market-data load and recovery tests meet documented latency, connection, and no-silent-loss targets.
-- Report evaluations and workflow tests cover grounding, prompt injection, retries, cancellation, and duplicate prevention.
+- Report evaluations and workflow tests cover source use, prompt injection, retries, cancellation, and duplicate prevention.
 - Migration rehearsals reconcile row counts, checksums, ownership relationships, identities, and sampled records against disposable datasets.
 - Current production remains on the legacy path and can ignore every replacement service.
 

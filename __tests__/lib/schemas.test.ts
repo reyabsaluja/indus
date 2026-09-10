@@ -197,7 +197,6 @@ describe("contextChatSchema", () => {
 				financialHealth: { totalCash: 60_000_000_000 },
 				dividends: { dividendYield: 0.004 },
 			},
-			cachedExplanations: {},
 			trigger: {
 				metricKey: "pe_ratio",
 				metricLabel: "P/E Ratio",
@@ -219,10 +218,11 @@ describe("contextChatSchema", () => {
 			context: {
 				...validInput.context,
 				chart: {
+					range: "1D",
 					interval: "1D",
 					points: [{ t: 1700000000, o: 178, h: 181, l: 177, c: 180, v: 1000 }],
 					latestPrice: 180,
-					dayChangePct: 1.5,
+					rangeChangePct: 1.5,
 				},
 			},
 		});
@@ -314,20 +314,11 @@ describe("contextChatSchema", () => {
 		).toBe(false);
 	});
 
-	it("rejects malformed timestamps and cached provider payloads", () => {
+	it("rejects malformed context timestamps", () => {
 		expect(
 			contextChatSchema.safeParse({
 				...validInput,
 				context: { ...validInput.context, asOf: "yesterday" },
-			}).success,
-		).toBe(false);
-		expect(
-			contextChatSchema.safeParse({
-				...validInput,
-				context: {
-					...validInput.context,
-					cachedExplanations: { pe_ratio: "x".repeat(501) },
-				},
 			}).success,
 		).toBe(false);
 	});
@@ -340,10 +331,11 @@ describe("contextChatSchema", () => {
 				context: {
 					...validInput.context,
 					chart: {
+						range: "1D",
 						interval: "1m",
 						points: Array.from({ length: 101 }, () => point),
 						latestPrice: 1,
-						dayChangePct: 0,
+						rangeChangePct: 0,
 					},
 				},
 			}).success,
@@ -354,10 +346,11 @@ describe("contextChatSchema", () => {
 				context: {
 					...validInput.context,
 					chart: {
+						range: "1D",
 						interval: "1m",
 						points: [{ ...point, v: -1 }],
 						latestPrice: 1,
-						dayChangePct: 0,
+						rangeChangePct: 0,
 					},
 				},
 			}).success,

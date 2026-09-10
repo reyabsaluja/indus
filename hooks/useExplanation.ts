@@ -1,16 +1,63 @@
+import { normalizeMetricExplanation, parseValueAnalysis } from "@/lib/metric-explanations";
 import type { Item } from "@/lib/prompts";
 
 // localStorage key for persistent cache
-const STORAGE_KEY = "indus_explanations_cache";
+const STORAGE_KEY = "indus_explanations_cache_v4";
+const CACHE_TTL_MS = 15 * 60 * 1000;
+const FALLBACK_CACHE_TTL_MS = 60 * 1000;
+const MAX_BATCH_SIZE = 25;
+
+interface ExplanationCacheEntry {
+	value: number;
+	explanation: string;
+	savedAt: number;
+}
+
+function cacheTtl(explanation: string): number {
+	return parseValueAnalysis(explanation)?.source === "fallback"
+		? FALLBACK_CACHE_TTL_MS
+		: CACHE_TTL_MS;
+}
 
 // Load cache from localStorage on initialization
-function loadCacheFromStorage(): Map<string, string> {
+function loadCacheFromStorage(): Map<string, ExplanationCacheEntry> {
 	if (typeof window === "undefined") return new Map();
 	try {
 		const stored = localStorage.getItem(STORAGE_KEY);
 		if (stored) {
-			const parsed = JSON.parse(stored);
-			return new Map(Object.entries(parsed));
+			const parsed: unknown = JSON.parse(stored);
+			if (
+				parsed &&
+				typeof parsed === "object" &&
+				"entries" in parsed &&
+				parsed.entries &&
+				typeof parsed.entries === "object"
+			) {
+				return new Map(
+					Object.entries(parsed.entries).flatMap((entry) => {
+						const value = entry[1];
+						if (
+							value === null ||
+							typeof value !== "object" ||
+							!("value" in value) ||
+							typeof value.value !== "number" ||
+							!Number.isFinite(value.value) ||
+							!("explanation" in value) ||
+							!("savedAt" in value) ||
+							typeof value.savedAt !== "number"
+						) {
+							return [];
+						}
+						const explanation = normalizeMetricExplanation(value.explanation);
+						return explanation &&
+							Date.now() - value.savedAt >= 0 &&
+							Date.now() - value.savedAt < cacheTtl(explanation)
+							? [[entry[0], { value: value.value, explanation, savedAt: value.savedAt }]]
+							: [];
+					}),
+				);
+			}
+			localStorage.removeItem(STORAGE_KEY);
 		}
 	} catch (_e) {
 		// Silently fail - cache will be empty
@@ -19,11 +66,10 @@ function loadCacheFromStorage(): Map<string, string> {
 }
 
 // Save cache to localStorage
-function saveCacheToStorage(cache: Map<string, string>) {
+function saveCacheToStorage(cache: Map<string, ExplanationCacheEntry>) {
 	if (typeof window === "undefined") return;
 	try {
-		const obj = Object.fromEntries(cache);
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
+		localStorage.setItem(STORAGE_KEY, JSON.stringify({ entries: Object.fromEntries(cache) }));
 	} catch (_e) {
 		// Silently fail - cache won't persist but app will continue working
 	}
@@ -32,6 +78,7 @@ function saveCacheToStorage(cache: Map<string, string>) {
 // Global cache and loading state - initialized from localStorage
 const explanationCache = loadCacheFromStorage();
 const loadingState = new Map<string, boolean>();
+const errorState = new Map<string, string>();
 
 // Cache update listeners - now keyed by cache key
 const cacheListeners = new Map<string, Set<() => void>>();
@@ -47,13 +94,30 @@ function notifyCacheUpdate(key: string) {
 	}
 }
 
-export function getCachedExplanation(symbol: string, metric: string) {
+export function getCachedExplanation(symbol: string, metric: string, value: number) {
 	const key = makeKey(symbol, metric);
-	return explanationCache.get(key);
+	const entry = explanationCache.get(key);
+	if (
+		!entry ||
+		entry.value !== value ||
+		Date.now() - entry.savedAt < 0 ||
+		Date.now() - entry.savedAt >= cacheTtl(entry.explanation)
+	) {
+		if (entry) {
+			explanationCache.delete(key);
+			saveCacheToStorage(explanationCache);
+		}
+		return undefined;
+	}
+	return entry.explanation;
 }
 
 export function isLoading(symbol: string, metric: string) {
 	return !!loadingState.get(makeKey(symbol, metric));
+}
+
+export function getExplanationError(symbol: string, metric: string) {
+	return errorState.get(makeKey(symbol, metric));
 }
 
 export function subscribeToCacheUpdates(symbol: string, metric: string, callback: () => void) {
@@ -83,14 +147,14 @@ export async function fetchExplanation(
 ): Promise<void> {
 	const key = makeKey(symbol, metric);
 
-	if (explanationCache.has(key) || loadingState.get(key)) {
+	if (getCachedExplanation(symbol, metric, value) || loadingState.get(key)) {
 		return;
 	}
 
-	// If batch preload is in progress, wait for it instead of starting a new one
+	// If another metric is loading, wait and then re-check this metric instead of dropping it.
 	if (pendingBatchRequest) {
 		await pendingBatchRequest;
-		return;
+		if (getCachedExplanation(symbol, metric, value) || loadingState.get(key)) return;
 	}
 
 	// Since we removed individual API endpoint, use batch API for single items
@@ -98,62 +162,80 @@ export async function fetchExplanation(
 }
 
 export async function batchPreload(items: Item[]) {
-	// If a batch request is already in progress, wait for it and return
-	// This prevents duplicate API calls from React Strict Mode or race conditions
-	if (pendingBatchRequest) {
-		await pendingBatchRequest;
-		return;
-	}
+	const previousRequest = pendingBatchRequest;
+	const request = (async () => {
+		if (previousRequest) await previousRequest;
 
-	// Only fetch if not already cached
-	const toFetch = items.filter((item) => !explanationCache.has(makeKey(item.symbol, item.metric)));
+		const toFetch = items.filter(
+			(item) => !getCachedExplanation(item.symbol, item.metric, item.value),
+		);
+		if (toFetch.length === 0) return;
 
-	if (toFetch.length === 0) {
-		return;
-	}
+		for (const item of toFetch) {
+			const key = makeKey(item.symbol, item.metric);
+			errorState.delete(key);
+			loadingState.set(key, true);
+			notifyCacheUpdate(key);
+		}
 
-	for (const item of toFetch) {
-		const key = makeKey(item.symbol, item.metric);
-		loadingState.set(key, true);
-		notifyCacheUpdate(key);
-	}
-
-	// Create and store the promise BEFORE the async operation
-	// This ensures any concurrent calls will see the pending request
-	pendingBatchRequest = (async () => {
 		try {
-			const res = await fetch("/api/batch-explain", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(toFetch),
-			});
-			const data = await res.json();
+			for (let offset = 0; offset < toFetch.length; offset += MAX_BATCH_SIZE) {
+				const batch = toFetch.slice(offset, offset + MAX_BATCH_SIZE);
+				try {
+					const res = await fetch("/api/batch-explain", {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify(batch),
+					});
+					const data: unknown = await res.json().catch(() => null);
+					if (!res.ok) {
+						const message =
+							data && typeof data === "object" && "error" in data && typeof data.error === "string"
+								? data.error
+								: "This explanation is temporarily unavailable.";
+						throw new Error(message);
+					}
 
-			if (!res.ok) {
-				throw new Error(`Explanation request failed with status ${res.status}`);
-			}
-
-			if (data && typeof data === "object" && data.explanations) {
-				for (const [key, text] of Object.entries(data.explanations)) {
-					if (typeof text === "string") {
-						explanationCache.set(key, text);
+					const explanations =
+						data && typeof data === "object" && "explanations" in data
+							? (data.explanations as Record<string, unknown>)
+							: {};
+					for (const item of batch) {
+						const key = makeKey(item.symbol, item.metric);
+						const text = normalizeMetricExplanation(explanations[key]);
+						if (text) {
+							explanationCache.set(key, {
+								value: item.value,
+								explanation: text,
+								savedAt: Date.now(),
+							});
+							notifyCacheUpdate(key);
+						}
+					}
+				} catch (error) {
+					const message =
+						error instanceof Error ? error.message : "This explanation is temporarily unavailable.";
+					for (const item of batch) {
+						const key = makeKey(item.symbol, item.metric);
+						errorState.set(key, message);
 						notifyCacheUpdate(key);
 					}
 				}
-				saveCacheToStorage(explanationCache);
 			}
-		} catch {
-			// Transient provider and network failures remain retryable.
+			saveCacheToStorage(explanationCache);
 		} finally {
 			for (const item of toFetch) {
 				const key = makeKey(item.symbol, item.metric);
 				loadingState.delete(key);
 				notifyCacheUpdate(key);
 			}
-			pendingBatchRequest = null;
 		}
 	})();
 
-	// Wait for the request to complete
-	await pendingBatchRequest;
+	pendingBatchRequest = request;
+	try {
+		await request;
+	} finally {
+		if (pendingBatchRequest === request) pendingBatchRequest = null;
+	}
 }

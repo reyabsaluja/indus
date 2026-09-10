@@ -10,7 +10,13 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import type { FinancialData } from "@/lib/types";
-import { formatCurrency, formatLargeNumber, formatPercent, formatRatio } from "@/lib/utils";
+import {
+	formatCurrency,
+	formatLargeNumber,
+	formatPercent,
+	formatPercentagePoints,
+	formatRatio,
+} from "@/lib/utils";
 import Hoverable from "./Hoverable";
 import MetricNameHover from "./MetricNameHover";
 
@@ -21,7 +27,7 @@ interface FinancialTableProps {
 
 const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) => {
 	const hasValidData = (value?: number) => {
-		return value !== undefined && value !== null && value !== 0;
+		return typeof value === "number" && Number.isFinite(value);
 	};
 
 	return (
@@ -45,7 +51,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 								<Hoverable
 									symbol={data.symbol}
 									metric="market_cap"
-									value={data.marketCap || 0}
+									value={data.marketCap ?? Number.NaN}
 									onChatTrigger={onChatTrigger}
 									metricLabel="Market Cap"
 								>
@@ -61,7 +67,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 								<Hoverable
 									symbol={data.symbol}
 									metric="enterprise_value"
-									value={data.enterpriseValue || 0}
+									value={data.enterpriseValue ?? Number.NaN}
 									onChatTrigger={onChatTrigger}
 									metricLabel="Enterprise Value"
 								>
@@ -79,7 +85,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 								<Hoverable
 									symbol={data.symbol}
 									metric="shares_outstanding"
-									value={data.sharesOutstanding || 0}
+									value={data.sharesOutstanding ?? Number.NaN}
 									onChatTrigger={onChatTrigger}
 									metricLabel="Shares Outstanding"
 								>
@@ -95,7 +101,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 								<Hoverable
 									symbol={data.symbol}
 									metric="revenue"
-									value={data.revenue || 0}
+									value={data.revenue ?? Number.NaN}
 									onChatTrigger={onChatTrigger}
 									metricLabel="Revenue (TTM)"
 								>
@@ -111,7 +117,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 								<Hoverable
 									symbol={data.symbol}
 									metric="employees"
-									value={data.employees || 0}
+									value={data.employees ?? Number.NaN}
 									onChatTrigger={onChatTrigger}
 									metricLabel="Employees"
 								>
@@ -140,7 +146,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 								<Hoverable
 									symbol={data.symbol}
 									metric="gross_margin"
-									value={data.grossMargins || 0}
+									value={data.grossMargins ?? Number.NaN}
 									onChatTrigger={onChatTrigger}
 									metricLabel="Gross Margin"
 								>
@@ -156,7 +162,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 								<Hoverable
 									symbol={data.symbol}
 									metric="ebitda_margin"
-									value={data.ebitdaMargins || 0}
+									value={data.ebitdaMargins ?? Number.NaN}
 									onChatTrigger={onChatTrigger}
 									metricLabel="EBITDA Margin"
 								>
@@ -172,7 +178,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 								<Hoverable
 									symbol={data.symbol}
 									metric="operating_margin"
-									value={data.operatingMargins || 0}
+									value={data.operatingMargins ?? Number.NaN}
 									onChatTrigger={onChatTrigger}
 									metricLabel="Operating Margin"
 								>
@@ -188,7 +194,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 								<Hoverable
 									symbol={data.symbol}
 									metric="net_margin"
-									value={data.netProfitMargins || 0}
+									value={data.netProfitMargins ?? Number.NaN}
 									onChatTrigger={onChatTrigger}
 									metricLabel="Net Margin"
 								>
@@ -204,7 +210,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 								<Hoverable
 									symbol={data.symbol}
 									metric="roa"
-									value={data.returnOnAssets || 0}
+									value={data.returnOnAssets ?? Number.NaN}
 									onChatTrigger={onChatTrigger}
 									metricLabel="ROA"
 								>
@@ -220,7 +226,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 								<Hoverable
 									symbol={data.symbol}
 									metric="roe"
-									value={data.returnOnEquity || 0}
+									value={data.returnOnEquity ?? Number.NaN}
 									onChatTrigger={onChatTrigger}
 									metricLabel="ROE"
 								>
@@ -249,7 +255,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 								<Hoverable
 									symbol={data.symbol}
 									metric="pe_ratio"
-									value={data.peRatio || 0}
+									value={data.peRatio ?? Number.NaN}
 									onChatTrigger={onChatTrigger}
 									metricLabel="P/E Ratio"
 								>
@@ -265,7 +271,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 								<Hoverable
 									symbol={data.symbol}
 									metric="forward_pe"
-									value={data.forwardPE || 0}
+									value={data.forwardPE ?? Number.NaN}
 									onChatTrigger={onChatTrigger}
 									metricLabel="Forward P/E"
 								>
@@ -281,7 +287,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 								<Hoverable
 									symbol={data.symbol}
 									metric="price_to_book"
-									value={data.priceToBook || 0}
+									value={data.priceToBook ?? Number.NaN}
 									onChatTrigger={onChatTrigger}
 									metricLabel="P/B Ratio"
 								>
@@ -298,7 +304,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 									<Hoverable
 										symbol={data.symbol}
 										metric="price_to_sales"
-										value={data.priceToSales || 0}
+										value={data.priceToSales ?? Number.NaN}
 										onChatTrigger={onChatTrigger}
 										metricLabel="P/S Ratio"
 									>
@@ -315,7 +321,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 								<Hoverable
 									symbol={data.symbol}
 									metric="ev_to_sales"
-									value={data.evToSales || 0}
+									value={data.evToSales ?? Number.NaN}
 									onChatTrigger={onChatTrigger}
 									metricLabel="EV/Sales"
 								>
@@ -331,7 +337,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 								<Hoverable
 									symbol={data.symbol}
 									metric="ev_to_ebitda"
-									value={data.evToEbitda || 0}
+									value={data.evToEbitda ?? Number.NaN}
 									onChatTrigger={onChatTrigger}
 									metricLabel="EV/EBITDA"
 								>
@@ -348,7 +354,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 									<Hoverable
 										symbol={data.symbol}
 										metric="peg_ratio"
-										value={data.pegRatio || 0}
+										value={data.pegRatio ?? Number.NaN}
 										onChatTrigger={onChatTrigger}
 										metricLabel="PEG Ratio"
 									>
@@ -379,7 +385,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 									<Hoverable
 										symbol={data.symbol}
 										metric="revenue_growth"
-										value={data.revenueGrowth || 0}
+										value={data.revenueGrowth ?? Number.NaN}
 										onChatTrigger={onChatTrigger}
 										metricLabel="Revenue Growth"
 									>
@@ -397,7 +403,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 									<Hoverable
 										symbol={data.symbol}
 										metric="earnings_growth"
-										value={data.earningsGrowth || 0}
+										value={data.earningsGrowth ?? Number.NaN}
 										onChatTrigger={onChatTrigger}
 										metricLabel="Earnings Growth"
 									>
@@ -414,7 +420,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 								<Hoverable
 									symbol={data.symbol}
 									metric="beta"
-									value={data.beta || 0}
+									value={data.beta ?? Number.NaN}
 									onChatTrigger={onChatTrigger}
 									metricLabel="Beta"
 								>
@@ -443,7 +449,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 								<Hoverable
 									symbol={data.symbol}
 									metric="total_cash"
-									value={data.totalCash || 0}
+									value={data.totalCash ?? Number.NaN}
 									onChatTrigger={onChatTrigger}
 									metricLabel="Total Cash"
 								>
@@ -459,7 +465,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 								<Hoverable
 									symbol={data.symbol}
 									metric="total_debt"
-									value={data.totalDebt || 0}
+									value={data.totalDebt ?? Number.NaN}
 									onChatTrigger={onChatTrigger}
 									metricLabel="Total Debt"
 								>
@@ -475,11 +481,11 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 								<Hoverable
 									symbol={data.symbol}
 									metric="debt_to_equity"
-									value={data.debtToEquity || 0}
+									value={data.debtToEquity ?? Number.NaN}
 									onChatTrigger={onChatTrigger}
 									metricLabel="Debt-to-Equity"
 								>
-									<span>{formatRatio(data.debtToEquity)}</span>
+									<span>{formatPercentagePoints(data.debtToEquity, 1)}</span>
 								</Hoverable>
 							</TableCell>
 						</TableRow>
@@ -505,7 +511,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 									<Hoverable
 										symbol={data.symbol}
 										metric="dividend_yield"
-										value={data.dividendYield || 0}
+										value={data.dividendYield ?? Number.NaN}
 										onChatTrigger={onChatTrigger}
 										metricLabel="Dividend Yield"
 									>
@@ -529,7 +535,7 @@ const FinancialTable: React.FC<FinancialTableProps> = ({ data, onChatTrigger }) 
 									<Hoverable
 										symbol={data.symbol}
 										metric="payout_ratio"
-										value={data.payoutRatio || 0}
+										value={data.payoutRatio ?? Number.NaN}
 										onChatTrigger={onChatTrigger}
 										metricLabel="Payout Ratio"
 									>

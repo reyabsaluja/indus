@@ -2,9 +2,9 @@ import { expect, test } from "@playwright/test";
 
 test("@integration public navigation reaches authentication", async ({ page }) => {
 	await page.goto("/");
-	await page.getByRole("link", { name: "Get Started" }).click();
+	await page.getByRole("link", { name: "Open Indus" }).click();
 	await expect(page).toHaveURL(/\/auth$/);
-	await expect(page.getByText("Welcome Back", { exact: true })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Continue your research." })).toBeVisible();
 });
 
 test("@integration protected pages redirect anonymous users", async ({ page }) => {

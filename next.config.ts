@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-	serverExternalPackages: ["yahoo-finance2"],
+	serverExternalPackages: ["@alpacahq/alpaca-trade-api", "yahoo-finance2"],
 	// Disable image optimization for Vercel deployment unless you have a pro plan
 	images: {
 		unoptimized: true,

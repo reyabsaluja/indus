@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-
-const PROTECTED_ROUTES = ["/dashboard", "/company", "/search", "/crypto", "/reports", "/settings"];
-
-function isProtectedRoute(pathname: string): boolean {
-	return PROTECTED_ROUTES.some((route) => pathname.startsWith(route));
-}
+import { isProtectedRoute, shouldBypassMiddleware } from "@/middleware";
 
 describe("middleware route protection", () => {
 	describe("protected routes", () => {
@@ -37,6 +32,12 @@ describe("middleware route protection", () => {
 		])("marks %s as public", (path) => {
 			expect(isProtectedRoute(path)).toBe(false);
 		});
+	});
+
+	it("bypasses Supabase initialization for health checks", () => {
+		expect(shouldBypassMiddleware("/api/health")).toBe(true);
+		expect(shouldBypassMiddleware("/api/health/other")).toBe(false);
+		expect(shouldBypassMiddleware("/api/stock-data")).toBe(false);
 	});
 
 	describe("security-critical routes are protected", () => {

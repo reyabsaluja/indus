@@ -1,8 +1,8 @@
 "use client";
 
 import { AlertCircle, ArrowLeft } from "lucide-react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { BrandMark } from "@/components/BrandMark";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -14,13 +14,7 @@ export default function AuthCodeError() {
 			<div className="w-full max-w-md">
 				<div className="text-center mb-8">
 					<div className="flex items-center justify-center space-x-2 mb-6">
-						<Image
-							src="/logo.png"
-							alt="Indus Logo"
-							width={40}
-							height={40}
-							className="rounded-full"
-						/>
+						<BrandMark className="size-10" />
 						<span className="text-2xl font-bold">Indus</span>
 					</div>
 				</div>

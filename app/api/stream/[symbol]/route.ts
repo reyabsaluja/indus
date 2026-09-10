@@ -1,6 +1,7 @@
 import { Alpaca } from "@alpacahq/alpaca-trade-api";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/observability/logger";
+import { finishRequestLog, getRequestHeaders, startRequestLog } from "@/lib/observability/request";
 import {
 	extractBarSymbol,
 	formatSseMessage,
@@ -11,6 +12,11 @@ import {
 	toStockCandlestickData,
 } from "@/lib/realtime/alpaca-stream";
 import { streamParamsSchema } from "@/lib/schemas/api";
+import {
+	FixedWindowRateLimiter,
+	getClientIp,
+	getRateLimitHeaders,
+} from "@/lib/security/request-rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,24 +27,48 @@ type AlpacaCryptoStream = ReturnType<Alpaca["marketData"]["cryptoStream"]>;
 type AlpacaStream = AlpacaStockStream | AlpacaCryptoStream;
 
 const encoder = new TextEncoder();
+const streamRateLimiter = new FixedWindowRateLimiter({ limit: 30, windowMs: 60_000 });
 
 export async function GET(request: Request, { params }: { params: Promise<{ symbol: string }> }) {
+	const requestLog = startRequestLog(request, "/api/stream/[symbol]");
 	let decodedSymbol: string;
 
 	try {
 		const resolvedParams = await params;
 		decodedSymbol = decodeURIComponent(resolvedParams.symbol);
 	} catch {
-		return Response.json({ error: "Invalid stream symbol" }, { status: 400 });
+		finishRequestLog(requestLog, 400);
+		return Response.json(
+			{ error: "Invalid stream symbol" },
+			{ status: 400, headers: getRequestHeaders(requestLog) },
+		);
 	}
 
 	const parsed = streamParamsSchema.safeParse({ symbol: decodedSymbol });
 	if (!parsed.success) {
-		return Response.json({ error: "Invalid stream symbol" }, { status: 400 });
+		finishRequestLog(requestLog, 400);
+		return Response.json(
+			{ error: "Invalid stream symbol" },
+			{ status: 400, headers: getRequestHeaders(requestLog) },
+		);
 	}
 
 	const symbol = normalizeStreamSymbol(parsed.data.symbol);
 	const assetType = isCryptoSymbol(symbol) ? "crypto" : "stock";
+	const rateLimit = streamRateLimiter.check(getClientIp(request));
+	const responseHeaders = {
+		"Cache-Control": "private, no-store, no-transform",
+		...getRequestHeaders(requestLog),
+		...getRateLimitHeaders(rateLimit),
+	};
+	if (!rateLimit.allowed) {
+		finishRequestLog(requestLog, 429, { symbol, assetType });
+		return Response.json(
+			{ error: "Too many live market connections" },
+			{ status: 429, headers: responseHeaders },
+		);
+	}
+
 	let cleanup: (() => void) | null = null;
 
 	const stream = new ReadableStream<Uint8Array>({
@@ -46,7 +76,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ symb
 			let alpacaStream: AlpacaStream | null = null;
 			let eventId = getNextEventId(request.headers.get("last-event-id"));
 			let heartbeat: ReturnType<typeof setInterval> | null = null;
+			let connectTimeout: ReturnType<typeof setTimeout> | null = null;
 			let closed = false;
+			let closeReason = "client_closed";
 
 			const enqueue = (chunk: string) => {
 				if (!closed) {
@@ -54,16 +86,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ symb
 				}
 			};
 
-			const close = () => {
+			const close = (reason = closeReason) => {
 				if (closed) {
 					return;
 				}
 
 				closed = true;
+				closeReason = reason;
 
 				if (heartbeat) {
 					clearInterval(heartbeat);
 					heartbeat = null;
+				}
+				if (connectTimeout) {
+					clearTimeout(connectTimeout);
+					connectTimeout = null;
 				}
 
 				try {
@@ -73,13 +110,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ symb
 						(alpacaStream as AlpacaStockStream | null)?.unsubscribeFromBars([symbol]);
 					}
 				} catch (error) {
-					logger.error("market_stream.unsubscribe_failed", error, { symbol, assetType });
+					logger.error("market_stream.unsubscribe_failed", error, {
+						requestId: requestLog.requestId,
+						symbol,
+						assetType,
+					});
 				}
 
 				try {
 					alpacaStream?.disconnect();
 				} catch (error) {
-					logger.error("market_stream.disconnect_failed", error, { symbol, assetType });
+					logger.error("market_stream.disconnect_failed", error, {
+						requestId: requestLog.requestId,
+						symbol,
+						assetType,
+					});
 				}
 
 				try {
@@ -87,9 +132,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ symb
 				} catch {
 					// The browser may have already closed the connection.
 				}
+				finishRequestLog(requestLog, 200, { symbol, assetType, closeReason });
 			};
 
-			cleanup = close;
+			cleanup = () => close("stream_cancelled");
 
 			const sendStreamError = () => {
 				enqueue(
@@ -99,10 +145,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ symb
 						data: { message: "Live market data is temporarily unavailable" },
 					}),
 				);
-				close();
+				close("provider_error");
 			};
 
 			const sendReady = () => {
+				if (connectTimeout) {
+					clearTimeout(connectTimeout);
+					connectTimeout = null;
+				}
 				enqueue(formatSseMessage({ id: eventId++, event: "ready", data: { symbol, assetType } }));
 			};
 
@@ -126,6 +176,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ symb
 					});
 
 					heartbeat = setInterval(() => enqueue(": keep-alive\n\n"), 15_000);
+					connectTimeout = setTimeout(() => {
+						logger.warn("market_stream.connect_timeout", {
+							requestId: requestLog.requestId,
+							symbol,
+							assetType,
+						});
+						sendStreamError();
+					}, 8_000);
 
 					if (assetType === "crypto") {
 						const cryptoStream = alpaca.marketData.cryptoStream();
@@ -136,9 +194,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ symb
 							cryptoStream.subscribeForBars([symbol]);
 						});
 						cryptoStream.onBar((bar) => sendBar(bar));
-						cryptoStream.onDisconnect(close);
+						cryptoStream.onDisconnect(() => close("provider_disconnect"));
 						cryptoStream.onError((error) => {
-							logger.error("market_stream.provider_failed", error, { symbol, assetType });
+							logger.error("market_stream.provider_failed", error, {
+								requestId: requestLog.requestId,
+								symbol,
+								assetType,
+							});
 							sendStreamError();
 						});
 						cryptoStream.connect();
@@ -151,20 +213,32 @@ export async function GET(request: Request, { params }: { params: Promise<{ symb
 							stockStream.subscribeForBars([symbol]);
 						});
 						stockStream.onBar((bar) => sendBar(bar));
-						stockStream.onDisconnect(close);
+						stockStream.onDisconnect(() => close("provider_disconnect"));
 						stockStream.onError((error) => {
-							logger.error("market_stream.provider_failed", error, { symbol, assetType });
+							logger.error("market_stream.provider_failed", error, {
+								requestId: requestLog.requestId,
+								symbol,
+								assetType,
+							});
 							sendStreamError();
 						});
 						stockStream.connect();
 					}
 				} catch (error) {
-					logger.error("market_stream.start_failed", error, { symbol, assetType });
+					logger.error("market_stream.start_failed", error, {
+						requestId: requestLog.requestId,
+						symbol,
+						assetType,
+					});
 					sendStreamError();
 				}
 			};
 
-			request.signal.addEventListener("abort", close, { once: true });
+			if (request.signal.aborted) {
+				close("client_abort");
+				return;
+			}
+			request.signal.addEventListener("abort", () => close("client_abort"), { once: true });
 			startAlpacaStream();
 		},
 		cancel() {
@@ -174,7 +248,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ symb
 
 	return new Response(stream, {
 		headers: {
-			"Cache-Control": "no-cache, no-transform",
+			...responseHeaders,
 			Connection: "keep-alive",
 			"Content-Type": "text/event-stream",
 			"X-Accel-Buffering": "no",
