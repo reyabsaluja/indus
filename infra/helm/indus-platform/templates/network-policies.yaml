@@ -1,0 +1,82 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: default-deny }
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: allow-dns }
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: allow-managed-services-and-https }
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock: { cidr: 0.0.0.0/0 }
+      ports:
+        - { protocol: TCP, port: 443 }
+    - to:
+        - ipBlock: { cidr: {{ .Values.aws.vpcCidr | quote }} }
+      ports:
+        - { protocol: TCP, port: 5432 }
+        - { protocol: TCP, port: 6379 }
+        - { protocol: TCP, port: 7233 }
+        - { protocol: TCP, port: 9098 }
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: observability }
+          podSelector:
+            matchLabels: { app.kubernetes.io/name: otel-collector }
+      ports:
+        - { protocol: TCP, port: 4317 }
+        - { protocol: TCP, port: 4318 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: edge-to-platform-api }
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "indus.selectorLabels" (dict "root" . "name" "platform-api") | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - ipBlock: { cidr: {{ .Values.aws.vpcCidr | quote }} }
+      ports:
+        - { protocol: TCP, port: 3000 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: edge-to-market-data }
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "indus.selectorLabels" (dict "root" . "name" "market-data") | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - ipBlock: { cidr: {{ .Values.aws.vpcCidr | quote }} }
+      ports:
+        - { protocol: TCP, port: 8081 }
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: observability }
+      ports:
+        - { protocol: TCP, port: 8081 }

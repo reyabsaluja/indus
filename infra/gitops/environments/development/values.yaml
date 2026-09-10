@@ -1,0 +1,43 @@
+environment: development
+aws:
+  region: ca-central-1
+  vpcCidr: 10.20.0.0/16
+  webBucket: indus-development-web-222222222222
+  cloudfrontDistributionId: replace-development
+  targetGroups:
+    platformApi: arn:aws:elasticloadbalancing:ca-central-1:222222222222:targetgroup/replace-api/0000000000000000
+    marketData: arn:aws:elasticloadbalancing:ca-central-1:222222222222:targetgroup/replace-stream/0000000000000000
+identity:
+  issuer: https://cognito-idp.ca-central-1.amazonaws.com/replace-development
+  audience: replace-development
+roles:
+  platformApi: arn:aws:iam::222222222222:role/indus-development-platform-api
+  sidekiq: arn:aws:iam::222222222222:role/indus-development-sidekiq
+  platformOutbox: arn:aws:iam::222222222222:role/indus-development-platform-outbox
+  reportsConsumer: arn:aws:iam::222222222222:role/indus-development-reports-consumer
+  marketData: arn:aws:iam::222222222222:role/indus-development-market-data
+  researchWorker: arn:aws:iam::222222222222:role/indus-development-research-worker
+  databaseMigrator: arn:aws:iam::222222222222:role/indus-development-database-migrator
+  webPublisher: arn:aws:iam::222222222222:role/indus-development-web-publisher
+secrets:
+  platformApi: arn:aws:secretsmanager:ca-central-1:222222222222:secret:indus-development/platform-api
+  marketData: arn:aws:secretsmanager:ca-central-1:222222222222:secret:indus-development/market-data
+  researchWorker: arn:aws:secretsmanager:ca-central-1:222222222222:secret:indus-development/research-worker
+  databaseMigration: arn:aws:secretsmanager:ca-central-1:222222222222:secret:indus-development/database-migration
+config:
+  rdsProxyEndpoint: replace-development.proxy.ca-central-1.rds.amazonaws.com
+  redisEndpoint: replace-development.serverless.cac1.cache.amazonaws.com
+  redisPort: 6379
+  redisCacheName: indus-development
+  redisUser: indus-development-app
+  mskBootstrapBrokers: replace-development.kafka-serverless.ca-central-1.amazonaws.com:9098
+  artifactBucket: indus-development-artifacts-222222222222
+  rawEventsBucket: indus-development-raw-events-222222222222
+  temporalAddress: replace.tmprl.cloud:7233
+  temporalNamespace: development.indus
+images:
+  platformApi: 111111111111.dkr.ecr.us-east-1.amazonaws.com/indus/platform-api@sha256:0000000000000000000000000000000000000000000000000000000000000000
+  marketData: 111111111111.dkr.ecr.us-east-1.amazonaws.com/indus/market-data@sha256:0000000000000000000000000000000000000000000000000000000000000000
+  researchWorker: 111111111111.dkr.ecr.us-east-1.amazonaws.com/indus/research-worker@sha256:0000000000000000000000000000000000000000000000000000000000000000
+  web: 111111111111.dkr.ecr.us-east-1.amazonaws.com/indus/web@sha256:0000000000000000000000000000000000000000000000000000000000000000
+webPublisher: { releaseId: "0000000000000000000000000000000000000000" }

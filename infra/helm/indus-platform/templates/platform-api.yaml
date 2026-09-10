@@ -1,0 +1,154 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platform-api
+  labels:
+    {{- include "indus.labels" . | nindent 4 }}
+    app.kubernetes.io/name: platform-api
+spec:
+  replicas: {{ .Values.platformApi.replicas }}
+  revisionHistoryLimit: 5
+  minReadySeconds: 15
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector:
+    matchLabels:
+      {{- include "indus.selectorLabels" (dict "root" . "name" "platform-api") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "indus.selectorLabels" (dict "root" . "name" "platform-api") | nindent 8 }}
+        {{- include "indus.labels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ toJson .Values.config | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: platform-api
+      automountServiceAccountToken: true
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        {{- include "indus.podSecurityContext" . | nindent 8 }}
+      topologySpreadConstraints:
+        {{- include "indus.spread" (dict "root" . "name" "platform-api") | nindent 8 }}
+      containers:
+        - name: platform-api
+          image: {{ .Values.images.platformApi | quote }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 3000, protocol: TCP }
+          envFrom:
+            - secretRef: { name: platform-api-runtime }
+          env:
+            - { name: PORT, value: "3000" }
+            - { name: AUTH_PROVIDER, value: "cognito" }
+            - { name: COGNITO_JWT_ISSUER, value: {{ .Values.identity.issuer | quote }} }
+            - { name: COGNITO_CLIENT_ID, value: {{ .Values.identity.audience | quote }} }
+            - { name: AWS_REGION, value: {{ .Values.aws.region | quote }} }
+            - { name: REDIS_AUTH_MODE, value: "iam" }
+            - { name: REDIS_ENDPOINT, value: {{ .Values.config.redisEndpoint | quote }} }
+            - { name: REDIS_PORT, value: {{ .Values.config.redisPort | quote }} }
+            - { name: REDIS_IAM_CACHE_NAME, value: {{ .Values.config.redisCacheName | quote }} }
+            - { name: REDIS_IAM_USER, value: {{ .Values.config.redisUser | quote }} }
+            - { name: REPORT_ARTIFACT_BUCKET, value: {{ .Values.config.artifactBucket | quote }} }
+            - { name: KAFKA_BROKERS, value: {{ .Values.config.mskBootstrapBrokers | quote }} }
+            - { name: KAFKA_AUTH_MODE, value: "msk_iam" }
+            - { name: KAFKA_SECURITY_PROTOCOL, value: "SASL_SSL" }
+            - { name: KAFKA_SASL_MECHANISM, value: "AWS_MSK_IAM" }
+            - { name: OTEL_SERVICE_NAME, value: "platform-api" }
+            - { name: OTEL_TRACES_EXPORTER, value: "otlp" }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otel-collector.observability.svc.cluster.local:4318" }
+          resources:
+            {{- toYaml .Values.platformApi.resources | nindent 12 }}
+          securityContext:
+            {{- include "indus.containerSecurityContext" . | nindent 12 }}
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            failureThreshold: 30
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 15
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec: { command: ["/bin/sh", "-c", "sleep 15"] }
+          volumeMounts:
+            - { name: runtime-secret, mountPath: /mnt/secrets-store, readOnly: true }
+            - { name: tmp, mountPath: /rails/tmp }
+            - { name: log, mountPath: /rails/log }
+      volumes:
+        - name: runtime-secret
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes: { secretProviderClass: platform-api }
+        - name: tmp
+          emptyDir: { sizeLimit: 1Gi }
+        - name: log
+          emptyDir: { sizeLimit: 1Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: platform-api
+  labels:
+    {{- include "indus.labels" . | nindent 4 }}
+    app.kubernetes.io/name: platform-api
+spec:
+  selector:
+    {{- include "indus.selectorLabels" (dict "root" . "name" "platform-api") | nindent 4 }}
+  ports:
+    - { name: http, port: 3000, targetPort: http, protocol: TCP }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: platform-api
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "indus.selectorLabels" (dict "root" . "name" "platform-api") | nindent 6 }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: platform-api
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: platform-api }
+  minReplicas: {{ .Values.platformApi.minReplicas }}
+  maxReplicas: {{ .Values.platformApi.maxReplicas }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies: [{ type: Percent, value: 25, periodSeconds: 60 }]
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies: [{ type: Percent, value: 100, periodSeconds: 60 }, { type: Pods, value: 4, periodSeconds: 60 }]
+      selectPolicy: Max
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 65 }
+    - type: Resource
+      resource:
+        name: memory
+        target: { type: Utilization, averageUtilization: 75 }
+---
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: platform-api
+spec:
+  serviceRef: { name: platform-api, port: http }
+  targetGroupARN: {{ .Values.aws.targetGroups.platformApi | quote }}
+  targetType: ip

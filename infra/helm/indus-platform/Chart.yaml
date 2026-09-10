@@ -1,0 +1,11 @@
+apiVersion: v2
+name: indus-platform
+description: Restricted production workloads for the Indus replacement platform
+type: application
+version: 0.1.0
+appVersion: "phase-4"
+kubeVersion: ">=1.30.0-0"
+annotations:
+  artifacthub.io/license: MIT
+  artifacthub.io/changes: |
+    - Initial Phase 4 AWS deployment contract
