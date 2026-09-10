@@ -2,12 +2,12 @@
 
 ## Purpose
 
-Run and verify the dormant Phase 2 Rails and React platform without production credentials or cloud services.
+Run and verify the Rails API and React web application without production credentials or cloud services.
 
 ## Prerequisites
 
 - Docker with Compose v2
-- Bun 1.3.13 for the existing application and replacement web checks
+- Bun 1.3.13 for web and browser checks
 - Chromium, Firefox, and WebKit installed through Playwright when running browser tests
 
 Ruby is intentionally not required on the host. Rails uses the pinned container toolchain under `tooling/rails` and the application image under `apps/platform-api`.
@@ -20,7 +20,7 @@ docker compose up --detach --wait postgres redis
 
 PostgreSQL listens on `127.0.0.1:15432`; Redis listens on `127.0.0.1:16379`. Both use disposable local credentials defined in `compose.yaml`.
 
-## Start the replacement applications
+## Start the applications
 
 Export a local Supabase URL, anonymous key, expected JWT issuer, and disposable local JWT secret. These values are passed only to the services that need them; the anonymous browser key is public, while the JWT secret remains server-side. An HTTPS JWKS endpoint can instead be supplied through a reviewed Compose override.
 
@@ -39,17 +39,17 @@ docker compose --profile application up --build
 
 Rails is exposed at `http://127.0.0.1:13000` and the Vite preview at `http://127.0.0.1:14173`. Health and readiness endpoints must succeed before exercising product routes.
 
-The application profile is dormant infrastructure. Starting it does not redirect the current Next.js application or change Vercel, Supabase, provider, or AWS configuration.
+The application profile is isolated local infrastructure. It does not change deployed AWS resources, provider configuration, or production data.
 
 ## Verify
 
-Run the Phase 2 verification entry point from the repository root:
+Run the application-platform verification entry point from the repository root:
 
 ```bash
 bash scripts/verify-phase2.sh
 ```
 
-The verifier checks contracts, Rails against real PostgreSQL and Redis, the replacement web application, and the unchanged root application. It uses no live financial provider or model credentials.
+The verifier checks contracts, Rails against real PostgreSQL and Redis, and the web application. It uses no live financial provider or model credentials.
 
 ## Stop
 
