@@ -13,7 +13,6 @@ const validChatRequest = {
 			financialHealth: { totalCash: 60_000_000_000 },
 			dividends: { dividendYield: 0.004 },
 		},
-		cachedExplanations: {},
 		trigger: { metricKey: "pe_ratio", metricLabel: "P/E Ratio", value: 28.5 },
 	},
 	messages: [],
@@ -56,6 +55,7 @@ test("@integration @characterization malformed model requests fail before authen
 	for (const { path, data, error } of cases) {
 		const response = await request.post(path, { data });
 		expect(response.status()).toBe(400);
+		expect(response.headers()["x-request-id"]).toMatch(/^[A-Za-z0-9._:-]+$/);
 		expect(await response.json()).toEqual({ error });
 	}
 });
@@ -107,6 +107,7 @@ test("@integration @characterization valid model requests require an authenticat
 
 	for (const response of responses) {
 		expect(response.status()).toBe(401);
+		expect(response.headers()["x-request-id"]).toMatch(/^[A-Za-z0-9._:-]+$/);
 		expect(await response.json()).toEqual({ error: "Unauthorized" });
 	}
 });
@@ -154,24 +155,58 @@ test("@integration @characterization public data endpoints preserve validation a
 	}
 });
 
+test("@integration @characterization health checks expose liveness and configured readiness", async ({
+	request,
+}) => {
+	const live = await request.get("/api/health?mode=live", {
+		headers: { "x-request-id": "health-check-test" },
+	});
+	expect(live.status()).toBe(200);
+	expect(live.headers()["x-request-id"]).toBe("health-check-test");
+	expect(live.headers()["cache-control"]).toContain("no-store");
+	await expect(live.json()).resolves.toMatchObject({
+		status: "ok",
+		mode: "live",
+		checks: { process: "ok" },
+	});
+
+	const ready = await request.get("/api/health");
+	expect(ready.status()).toBe(200);
+	await expect(ready.json()).resolves.toMatchObject({
+		status: "ok",
+		mode: "ready",
+		checks: {
+			process: "ok",
+			supabase: "configured",
+			alpaca: "configured",
+			gemini: "configured",
+		},
+	});
+});
+
 test("@integration @characterization report resources validate identifiers and authentication", async ({
 	request,
 }) => {
 	const invalidGet = await request.get("/api/reports/not-a-uuid");
 	const invalidDelete = await request.delete("/api/reports/not-a-uuid");
+	const invalidPdf = await request.get("/api/reports/not-a-uuid/pdf");
 	expect(invalidGet.status()).toBe(400);
 	expect(invalidDelete.status()).toBe(400);
+	expect(invalidPdf.status()).toBe(400);
 
 	const reportId = "11111111-1111-4111-8111-111111111111";
 	const anonymousList = await request.get("/api/reports");
 	const anonymousGet = await request.get(`/api/reports/${reportId}`);
 	const anonymousDelete = await request.delete(`/api/reports/${reportId}`);
+	const anonymousPdf = await request.get(`/api/reports/${reportId}/pdf`);
 	expect(anonymousList.status()).toBe(401);
 	expect(anonymousGet.status()).toBe(401);
 	expect(anonymousDelete.status()).toBe(401);
+	expect(anonymousPdf.status()).toBe(401);
 	expect(await anonymousList.json()).toEqual({ error: "Unauthorized" });
 	expect(await anonymousGet.json()).toEqual({ error: "Unauthorized" });
 	expect(await anonymousDelete.json()).toEqual({ error: "Unauthorized" });
+	expect(await anonymousPdf.json()).toEqual({ error: "Unauthorized" });
 });
 
 test("@integration @characterization malformed stream symbols are rejected before connecting upstream", async ({

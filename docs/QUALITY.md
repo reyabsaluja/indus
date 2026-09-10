@@ -69,7 +69,7 @@ bunx supabase --version
 | Integration | `bun run test:integration` | Public navigation, auth redirects, and HTTP boundary behavior |
 | Browser | `bun run test:browser` | Chromium, Firefox, WebKit, and mobile Chromium product paths |
 | Accessibility | `bun run test:accessibility` | WCAG A/AA serious and critical violations on public pages |
-| Authenticated browser | `bun run test:authenticated` | Real local sign-in, protected product routes, tenant API access, and authenticated WCAG checks |
+| Authenticated browser | `bun run test:authenticated` | Real local sign-in, protected product routes, tenant API access, and authenticated WCAG checks against a serial, isolated Supabase stack |
 | Performance | `bun run test:performance` | Production-mode navigation and JavaScript transfer budgets |
 | Market data | `bun run test:market-data` | Rust formatting, Clippy, fixtures, replay, SSE boundaries, PostgreSQL persistence, Kafka orchestration, and image build |
 
@@ -78,6 +78,8 @@ bunx supabase --version
 Indus uses test-driven development for new behavior and regressions: define the observable contract and its failure boundaries before or alongside the production implementation. Verification effort should scale with risk and blast radius, with enough focused coverage to make expected behavior and failure modes explicit. Keep each production change small while covering its valid path, malformed inputs, boundary values, failure behavior, security properties, and relevant browser contract at the appropriate layers.
 
 Tests should verify externally meaningful behavior instead of implementation details. A small production change may therefore be supported by schema tests, unit cases, database assertions, and browser coverage rather than a single oversized test file.
+
+Provider-facing changes must preserve the runtime policies in [`RELIABILITY.md`](./RELIABILITY.md). Tests should cover timeout behavior, retry classification, stale-cache behavior, fallback selection, and partial upstream responses when those boundaries change.
 
 Migration characterization tests use the `@characterization` tag alongside their normal verification layer. They preserve externally visible authentication, validation, error-envelope, and transport behavior that replacement Rails, React, or Rust services must match intentionally. Change a characterized contract only with an explicit migration decision and corresponding consumer updates.
 

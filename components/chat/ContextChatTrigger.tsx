@@ -39,7 +39,7 @@ export const ContextChatTrigger: React.FC<ContextChatTriggerProps> = ({
 				className="text-xs h-7 gap-1.5 w-full"
 			>
 				<MessageSquare className="h-3.5 w-3.5" />
-				Ask more
+				Ask Indus
 			</Button>
 		</div>
 	);

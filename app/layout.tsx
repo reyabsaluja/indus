@@ -1,38 +1,50 @@
 // app/layout.tsx
 import "./globals.css";
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist_Mono, Manrope, Newsreader } from "next/font/google";
 import { cookies } from "next/headers";
 
 import { AppProviders } from "@/components/AppProviders";
 import { ConditionalLayout } from "@/components/ConditionalLayout";
 
-const geistSans = Geist({
-	variable: "--font-geist-sans",
+const manrope = Manrope({
+	variable: "--font-manrope",
 	subsets: ["latin"],
 });
 const geistMono = Geist_Mono({
 	variable: "--font-geist-mono",
 	subsets: ["latin"],
 });
+const newsreader = Newsreader({
+	variable: "--font-newsreader",
+	subsets: ["latin"],
+	style: ["normal", "italic"],
+});
 
 export const metadata: Metadata = {
-	title: "Indus",
-	description: "AI-powered stock trading dashboard",
+	metadataBase: new URL("https://indus-trade.vercel.app"),
+	title: {
+		default: "Indus | Financial intelligence, in context",
+		template: "%s | Indus",
+	},
+	description:
+		"Research public companies with live market charts, durable financial context, and AI analytics that work from the data in view.",
 	icons: {
-		icon: "/favicon.ico",
+		icon: [{ url: "/logo.svg", type: "image/svg+xml" }],
+		shortcut: "/logo.svg",
+		apple: "/logo.png",
 	},
 	openGraph: {
-		title: "Indus",
-		description: "AI-powered stock trading dashboard",
-		url: "https://indus-trade.vercel.app", // replace with actual URL
+		title: "Indus | Financial intelligence, in context",
+		description: "Move from market signal to financial context without leaving your research.",
+		url: "/",
 		siteName: "Indus",
 		images: [
 			{
-				url: "https://indus-trade.vercel.app/og-image.png", // replace with your image URL
+				url: "/og-image.png",
 				width: 1200,
 				height: 630,
-				alt: "Indus Dashboard",
+				alt: "Indus financial research workspace",
 			},
 		],
 		locale: "en_US",
@@ -40,10 +52,9 @@ export const metadata: Metadata = {
 	},
 	twitter: {
 		card: "summary_large_image",
-		title: "Indus",
-		description: "AI-powered stock trading dashboard",
-		images: ["https://indus-trade.vercel.app/og-image.png"], // same image or another
-		creator: "@reyabsaluja", // optional
+		title: "Indus | Financial intelligence, in context",
+		description: "Move from market signal to financial context without leaving your research.",
+		images: ["/og-image.png"],
 	},
 };
 
@@ -53,7 +64,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
 	return (
 		<html lang="en" suppressHydrationWarning>
-			<body className={`${geistSans.variable} ${geistMono.variable} antialiased overflow-x-hidden`}>
+			<body
+				className={`${manrope.variable} ${geistMono.variable} ${newsreader.variable} overflow-x-hidden antialiased`}
+			>
 				<AppProviders>
 					<ConditionalLayout defaultOpen={defaultOpen}>{children}</ConditionalLayout>
 				</AppProviders>

@@ -1,18 +1,3 @@
-export type Item = {
-	symbol: string;
-	metric: string;
-	value: number;
-};
-
-export type StructuredExplanation = {
-	metric_display: string;
-	definition: string;
-	explanation: string;
-	insight: string;
-	learn_more_url: string;
-	evaluation?: "green" | "red" | "neutral" | "amber";
-};
-
 export type MetricDefinition = {
 	metric_display: string;
 	definition: string;
@@ -84,6 +69,14 @@ export interface ReportStockData {
 	netProfitMargins?: number;
 	returnOnEquity?: number;
 	debtToEquity?: number;
+	recentNews?: ReportNewsSource[];
+}
+
+export interface ReportNewsSource {
+	headline: string;
+	publisher: string;
+	publishedAt: string;
+	url: string;
 }
 
 export interface CryptoData {
@@ -123,7 +116,7 @@ export interface CryptoData {
 	fiftyTwoWeekLow?: number;
 }
 
-export interface ChartPoint {
+interface ChartPoint {
 	t: number;
 	o: number;
 	h: number;
@@ -133,10 +126,11 @@ export interface ChartPoint {
 }
 
 export interface PageChartData {
+	range?: string;
 	interval?: string;
 	points?: ChartPoint[];
 	latestPrice?: number;
-	dayChangePct?: number;
+	rangeChangePct?: number;
 }
 
 export interface MetricGroups {
@@ -187,12 +181,12 @@ export interface PageContext {
 	asOf: string;
 	metricGroups: MetricGroups;
 	chart?: {
+		range: string;
 		interval: string;
 		points: ChartPoint[];
 		latestPrice: number;
-		dayChangePct: number;
+		rangeChangePct: number;
 	};
-	cachedExplanations: Record<string, string>;
 	trigger: {
 		metricKey: string;
 		metricLabel: string;
@@ -221,4 +215,9 @@ export interface ContextChatState {
 	};
 }
 
-export type ValueAnalysis = StructuredExplanation;
+export interface ValueAnalysis {
+	metric_display: string;
+	insight: string;
+	evaluation: "green" | "red" | "neutral" | "amber";
+	source?: "model" | "fallback";
+}

@@ -1,8 +1,7 @@
 "use client";
 
-import { X } from "lucide-react";
-import type React from "react";
-import { useEffect } from "react";
+import { BrainCircuit, ShieldCheck, X } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import type { ContextChatState } from "@/lib/types";
 import { ChatHeader } from "./ChatHeader";
@@ -17,120 +16,133 @@ interface ChatPanelProps {
 	onSendMessage: (message: string) => void;
 	onRegenerateLast: () => void;
 	onClearError: () => void;
+	onStop: () => void;
 }
 
-export const ChatPanel: React.FC<ChatPanelProps> = ({
+export function ChatPanel({
 	state,
 	onClose,
 	onSendMessage,
 	onRegenerateLast,
 	onClearError,
-}) => {
-	// Focus trap and keyboard handling
+	onStop,
+}: ChatPanelProps) {
+	const panelRef = useRef<HTMLDivElement>(null);
+	const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+
 	useEffect(() => {
 		if (!state.open) return;
+		previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+		const focusTimer = window.setTimeout(() => {
+			panelRef.current?.querySelector<HTMLElement>("textarea")?.focus();
+		}, 50);
 
-		const handleEscape = (e: KeyboardEvent) => {
-			if (e.key === "Escape") {
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				event.preventDefault();
 				onClose();
+				return;
+			}
+			if (event.key !== "Tab" || !panelRef.current) return;
+
+			const focusable = Array.from(
+				panelRef.current.querySelectorAll<HTMLElement>(
+					'button:not([disabled]), textarea:not([disabled]), a[href], [tabindex="0"]',
+				),
+			).filter((element) => element.offsetParent !== null);
+			const first = focusable[0];
+			const last = focusable.at(-1);
+			if (!first || !last) return;
+			if (event.shiftKey && document.activeElement === first) {
+				event.preventDefault();
+				last.focus();
+			} else if (!event.shiftKey && document.activeElement === last) {
+				event.preventDefault();
+				first.focus();
 			}
 		};
 
-		const handleFocusTrap = (e: KeyboardEvent) => {
-			if (e.key === "Tab") {
-				const focusableElements = document.querySelectorAll(
-					'[role="dialog"] button, [role="dialog"] textarea, [role="dialog"] [tabindex="0"]',
-				);
-				const firstElement = focusableElements[0] as HTMLElement;
-				const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
-
-				if (!e.shiftKey && document.activeElement === lastElement) {
-					e.preventDefault();
-					firstElement?.focus();
-				} else if (e.shiftKey && document.activeElement === firstElement) {
-					e.preventDefault();
-					lastElement?.focus();
-				}
-			}
-		};
-
-		document.addEventListener("keydown", handleEscape);
-		document.addEventListener("keydown", handleFocusTrap);
-
+		document.addEventListener("keydown", handleKeyDown);
 		return () => {
-			document.removeEventListener("keydown", handleEscape);
-			document.removeEventListener("keydown", handleFocusTrap);
+			window.clearTimeout(focusTimer);
+			document.removeEventListener("keydown", handleKeyDown);
+			previouslyFocusedRef.current?.focus();
 		};
-	}, [state.open, onClose]);
+	}, [onClose, state.open]);
 
 	if (!state.open) return null;
-
-	const hasUserMessages = state.messages.some((m) => m.role === "user");
+	const hasUserMessages = state.messages.some((message) => message.role === "user");
 
 	return (
-		<div
-			className="fixed right-0 top-0 md:top-auto md:bottom-4 md:right-4 z-50 w-full md:w-[460px] max-h-full md:max-h-[70vh] flex flex-col rounded-none md:rounded-2xl bg-zinc-950/98 backdrop-blur-lg border-l-2 md:border-2 border-emerald-500/30 md:border-zinc-700/50 shadow-2xl shadow-black/80 md:shadow-emerald-500/10"
-			role="dialog"
-			aria-labelledby="chat-title"
-			aria-modal="true"
-			style={{
-				boxShadow:
-					"0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(16, 185, 129, 0.1), 0 0 20px rgba(16, 185, 129, 0.05)",
-			}}
-		>
-			{/* Header */}
-			<div className="relative px-4 pt-4 pb-2 border-b border-zinc-800">
-				<ChatHeader
-					triggerMetric={state.triggerMetric}
-					companySymbol={state.initialContext?.symbol}
-				/>
-				<Button
-					variant="ghost"
-					size="sm"
-					onClick={onClose}
-					className="absolute right-3 top-3 h-6 w-6 p-0 text-zinc-400 hover:text-zinc-200"
-					aria-label="Close chat"
-				>
-					<X className="h-4 w-4" />
-				</Button>
-			</div>
+		<>
+			<button
+				type="button"
+				className="fixed inset-0 z-40 cursor-default bg-background/35 backdrop-blur-[2px] md:bg-background/15"
+				onClick={onClose}
+				aria-label="Close analyst"
+			/>
+			<div
+				ref={panelRef}
+				className="fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] min-h-[68dvh] flex-col overflow-hidden rounded-t-[1.6rem] border border-border/80 bg-card shadow-[0_-28px_90px_-35px_rgba(0,0,0,0.85)] md:inset-x-auto md:bottom-4 md:right-4 md:h-[min(780px,calc(100dvh-2rem))] md:min-h-0 md:w-[480px] md:rounded-[1.6rem]"
+				role="dialog"
+				aria-labelledby="chat-title"
+				aria-describedby="chat-source-note"
+				aria-modal="true"
+			>
+				<div className="border-b border-border/70 bg-primary/[0.045] px-4 pb-4 pt-4 sm:px-5">
+					<div className="flex items-start justify-between gap-4">
+						<div className="flex items-start gap-3">
+							<span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/12 text-primary">
+								<BrainCircuit className="size-4" />
+							</span>
+							<ChatHeader
+								triggerMetric={state.triggerMetric}
+								companySymbol={state.initialContext?.symbol}
+							/>
+						</div>
+						<Button
+							variant="ghost"
+							size="icon"
+							onClick={onClose}
+							className="size-8 rounded-full"
+							aria-label="Close analyst"
+						>
+							<X className="size-4" />
+						</Button>
+					</div>
+					<div
+						id="chat-source-note"
+						className="mt-3 flex items-center gap-2 text-[10px] leading-4 text-muted-foreground"
+					>
+						<ShieldCheck className="size-3.5 shrink-0 text-primary" />
+						Based on the company fundamentals and chart points supplied by this page.
+					</div>
+					<ContextSummary context={state.initialContext} />
+				</div>
 
-			{/* Origin Metric Tag */}
-			<div className="px-4">
-				{state.triggerMetric && (
-					<span className="mt-1 inline-block text-[10px] tracking-wide text-zinc-500">
-						Origin: {state.triggerMetric.label}
-					</span>
+				<MessageList
+					messages={state.messages}
+					sending={state.sending}
+					error={state.error}
+					onRegenerateLast={onRegenerateLast}
+					onClearError={onClearError}
+					hasUserMessages={hasUserMessages}
+				/>
+
+				{!hasUserMessages && (
+					<div className="px-4 pb-3 sm:px-5">
+						<SuggestionChips
+							triggerMetric={state.triggerMetric?.label}
+							onSendMessage={onSendMessage}
+						/>
+					</div>
 				)}
 
-				{/* Context Summary */}
-				<ContextSummary context={state.initialContext} />
+				<ChatInput onSendMessage={onSendMessage} sending={state.sending} onStop={onStop} />
+				<p className="border-t border-border/60 px-4 py-2 text-center text-[9px] leading-4 text-muted-foreground sm:px-5">
+					Educational interpretation only. Verify material decisions against primary filings.
+				</p>
 			</div>
-
-			{/* Message List */}
-			<MessageList
-				messages={state.messages}
-				sending={state.sending}
-				error={state.error}
-				onRegenerateLast={onRegenerateLast}
-				onClearError={onClearError}
-				hasUserMessages={hasUserMessages}
-			/>
-
-			{/* Suggestion Chips (only shown before first user message) */}
-			{!hasUserMessages && (
-				<div className="px-4 pb-2">
-					<SuggestionChips onSendMessage={onSendMessage} />
-				</div>
-			)}
-
-			{/* Disclaimer */}
-			<p className="text-[10px] text-zinc-500 text-center px-3 py-1 border-t border-zinc-800">
-				Educational information only. Not investment advice.
-			</p>
-
-			{/* Input */}
-			<ChatInput onSendMessage={onSendMessage} sending={state.sending} />
-		</div>
+		</>
 	);
-};
+}

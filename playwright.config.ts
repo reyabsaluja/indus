@@ -2,8 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 const useProductionServer = process.env.E2E_USE_PRODUCTION === "true";
 const port = 3100;
-const baseURL = `http://localhost:${port}`;
-const serverURL = `http://127.0.0.1:${port}`;
+const serverURL = `http://localhost:${port}`;
 
 export default defineConfig({
 	testDir: "./e2e",
@@ -18,7 +17,7 @@ export default defineConfig({
 	},
 	reporter: [["list"], ["html", { outputFolder: "playwright-report", open: "never" }]],
 	use: {
-		baseURL,
+		baseURL: serverURL,
 		locale: "en-CA",
 		timezoneId: "America/Toronto",
 		trace: "retain-on-failure",
@@ -27,8 +26,8 @@ export default defineConfig({
 	},
 	webServer: {
 		command: useProductionServer
-			? `bun run start --hostname 127.0.0.1 --port ${port}`
-			: `bun run dev --hostname 127.0.0.1 --port ${port}`,
+			? `bun run start --hostname localhost --port ${port}`
+			: `bun run dev --hostname localhost --port ${port}`,
 		url: serverURL,
 		reuseExistingServer: false,
 		timeout: 120_000,

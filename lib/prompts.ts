@@ -5,24 +5,26 @@ export type Item = {
 };
 
 export function makeBatchPrompt(items: Item[]): string {
-	let prompt = `For each of the following financial metrics, provide analytical insights about the specific values following the exact JSON format specified in the system prompt. Return a JSON object where each key corresponds to the item number and the value is the value analysis:\n\n`;
+	let prompt = `Explain each displayed metric within the evidence boundary above. Return a JSON object keyed by item number.\n\n`;
 
 	items.forEach((item, idx) => {
 		const label = getMetricLabel(item.symbol, item.metric, item.value);
 		prompt += `${idx + 1}. ${label}\n`;
 	});
 
-	prompt += `\nReturn format: {"1": {"metric_display": "...", "insight": "...", "evaluation": "green|red|neutral|amber"}, "2": {...}, ...} where each value follows the ValueAnalysis JSON structure.`;
+	prompt += `\nReturn format: {"1": {"metric_display": "...", "insight": "...", "evaluation": "green|red|neutral|amber"}, "2": {...}}. Include exactly one entry for every item.`;
 
 	return prompt;
 }
 
-function getMetricLabel(symbol: string, metric: string, value: number): string {
+export function getMetricLabel(symbol: string, metric: string, value: number): string {
 	const formatCurrency = (val: number) => {
-		if (val >= 1e12) return `$${(val / 1e12).toFixed(2)}T`;
-		if (val >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
-		if (val >= 1e6) return `$${(val / 1e6).toFixed(2)}M`;
-		return `$${val.toFixed(2)}`;
+		const absolute = Math.abs(val);
+		const prefix = val < 0 ? "-$" : "$";
+		if (absolute >= 1e12) return `${prefix}${(absolute / 1e12).toFixed(2)}T`;
+		if (absolute >= 1e9) return `${prefix}${(absolute / 1e9).toFixed(2)}B`;
+		if (absolute >= 1e6) return `${prefix}${(absolute / 1e6).toFixed(2)}M`;
+		return `${prefix}${absolute.toFixed(2)}`;
 	};
 
 	const formatPercentage = (val: number) => `${(val * 100).toFixed(1)}%`;
@@ -87,7 +89,7 @@ function getMetricLabel(symbol: string, metric: string, value: number): string {
 		case "total_debt":
 			return `${symbol} total debt: ${formatCurrency(value)}`;
 		case "debt_to_equity":
-			return `${symbol} debt-to-equity ratio: ${formatRatio(value)}`;
+			return `${symbol} debt-to-equity: ${value.toFixed(1)}%`;
 
 		// Growth metrics
 		case "revenue_growth":

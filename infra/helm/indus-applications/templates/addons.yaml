@@ -1,0 +1,147 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata: { name: aws-load-balancer-controller, namespace: argocd }
+spec:
+  project: indus
+  source:
+    repoURL: https://aws.github.io/eks-charts
+    chart: aws-load-balancer-controller
+    targetRevision: 1.13.4
+    helm:
+      valuesObject:
+        clusterName: {{ .Values.clusterName }}
+        region: {{ .Values.awsRegion }}
+        vpcId: {{ .Values.vpcId }}
+        replicaCount: 2
+        serviceAccount:
+          create: true
+          name: aws-load-balancer-controller
+          annotations: { eks.amazonaws.com/role-arn: {{ .Values.roles.loadBalancer | quote }} }
+        enableServiceMutatorWebhook: false
+        podDisruptionBudget: { maxUnavailable: 1 }
+        securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+  destination: { server: "https://kubernetes.default.svc", namespace: kube-system }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ServerSideApply=true]
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata: { name: secrets-store-csi-driver, namespace: argocd }
+spec:
+  project: indus
+  source:
+    repoURL: https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
+    chart: secrets-store-csi-driver
+    targetRevision: 1.5.3
+    helm:
+      valuesObject:
+        syncSecret: { enabled: true }
+        enableSecretRotation: true
+        rotationPollInterval: 5m
+        linux: { metricsAddr: ":8095" }
+  destination: { server: "https://kubernetes.default.svc", namespace: kube-system }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ServerSideApply=true]
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata: { name: secrets-store-csi-provider-aws, namespace: argocd }
+spec:
+  project: indus
+  source:
+    repoURL: https://aws.github.io/secrets-store-csi-driver-provider-aws
+    chart: secrets-store-csi-driver-provider-aws
+    targetRevision: 2.1.1
+  destination: { server: "https://kubernetes.default.svc", namespace: kube-system }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ServerSideApply=true]
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata: { name: metrics-server, namespace: argocd }
+spec:
+  project: indus
+  source:
+    repoURL: https://kubernetes-sigs.github.io/metrics-server
+    chart: metrics-server
+    targetRevision: 3.13.0
+    helm:
+      valuesObject:
+        replicas: 2
+        podDisruptionBudget: { enabled: true, minAvailable: 1 }
+  destination: { server: "https://kubernetes.default.svc", namespace: kube-system }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata: { name: otel-collector, namespace: argocd }
+spec:
+  project: indus
+  source:
+    repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+    chart: opentelemetry-collector
+    targetRevision: 0.136.0
+    helm:
+      valuesObject:
+        fullnameOverride: otel-collector
+        mode: deployment
+        replicaCount: 2
+        serviceAccount:
+          create: true
+          name: otel-collector
+          annotations: { eks.amazonaws.com/role-arn: {{ .Values.roles.otelCollector | quote }} }
+        podLabels: { app.kubernetes.io/name: otel-collector }
+        podDisruptionBudget: { enabled: true, minAvailable: 1 }
+        securityContext: { runAsNonRoot: true, runAsUser: 10001, seccompProfile: { type: RuntimeDefault } }
+        containerSecurityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities: { drop: [ALL] }
+        resources:
+          requests: { cpu: 250m, memory: 512Mi }
+          limits: { cpu: "1", memory: 2Gi }
+        config:
+          receivers:
+            otlp:
+              protocols: { grpc: { endpoint: "0.0.0.0:4317" }, http: { endpoint: "0.0.0.0:4318" } }
+            prometheus:
+              config:
+                scrape_configs:
+                  - job_name: kubernetes-pods
+                    kubernetes_sd_configs: [{ role: pod }]
+                    relabel_configs:
+                      - { source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape], action: keep, regex: "true" }
+                      - { source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path], action: replace, target_label: __metrics_path__, regex: "(.+)" }
+                      - { source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port], action: replace, regex: "([^:]+)(?::\\d+)?;(\\d+)", replacement: "$1:$2", target_label: __address__ }
+          processors:
+            batch: {}
+            memory_limiter: { check_interval: 1s, limit_percentage: 75, spike_limit_percentage: 15 }
+            resource:
+              attributes:
+                - { key: deployment.environment, value: {{ .Values.environment | quote }}, action: upsert }
+          exporters:
+            prometheusremotewrite:
+              endpoint: {{ .Values.prometheusRemoteWriteUrl | quote }}
+              auth: { authenticator: sigv4auth }
+            awsxray: { region: {{ .Values.awsRegion | quote }} }
+            awscloudwatchlogs:
+              region: {{ .Values.awsRegion | quote }}
+              log_group_name: /aws/eks/{{ .Values.clusterName }}/application
+              log_stream_name: otel
+          extensions:
+            health_check: { endpoint: "0.0.0.0:13133" }
+            sigv4auth: { region: {{ .Values.awsRegion | quote }}, service: aps }
+          service:
+            extensions: [health_check, sigv4auth]
+            pipelines:
+              metrics: { receivers: [otlp, prometheus], processors: [memory_limiter, resource, batch], exporters: [prometheusremotewrite] }
+              traces: { receivers: [otlp], processors: [memory_limiter, resource, batch], exporters: [awsxray] }
+              logs: { receivers: [otlp], processors: [memory_limiter, resource, batch], exporters: [awscloudwatchlogs] }
+  destination: { server: "https://kubernetes.default.svc", namespace: observability }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ServerSideApply=true]

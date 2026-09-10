@@ -1,123 +1,102 @@
 import { NextResponse } from "next/server";
+import { GeminiApiError, GeminiClient, getGeminiResponseStatus } from "@/lib/ai/geminiClient";
 import { env } from "@/lib/env";
+import {
+	createMetricExplanationFallback,
+	fillMissingMetricExplanations,
+	parseMetricExplanationResponse,
+} from "@/lib/metric-explanations";
 import { logger } from "@/lib/observability/logger";
+import { finishRequestLog, getRequestHeaders, startRequestLog } from "@/lib/observability/request";
 import { type Item, makeBatchPrompt } from "@/lib/prompts";
-import { batchExplainSchema, geminiTextResponseSchema } from "@/lib/schemas/api";
+import { batchExplainSchema } from "@/lib/schemas/api";
 import { type AiAccessClient, checkAiAccess, getAiQuotaHeaders } from "@/lib/security/ai-access";
 import { createClient } from "@/lib/supabase/server";
 import { VALUE_ANALYSIS_SYSTEM_PROMPT } from "@/lib/system-prompts";
 
-const GEMINI_API_URL =
-	"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
-const DEFAULT_EXPLANATION = "No explanation available.";
-
-function explanationKey(item: Item): string {
-	return `${item.symbol}_${item.metric}`;
-}
-
-function parseStructuredExplanations(
-	rawText: string,
-	items: Item[],
-): Record<string, string> | null {
-	const jsonMatch = rawText.match(/```json\s*([\s\S]*?)\s*```/) ?? rawText.match(/\{[\s\S]*\}/);
-	const jsonText = jsonMatch?.[1] ?? jsonMatch?.[0] ?? rawText;
-
-	try {
-		const parsed: unknown = JSON.parse(jsonText);
-		if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-			return null;
-		}
-
-		return Object.fromEntries(
-			items.map((item, index) => {
-				const explanation = (parsed as Record<string, unknown>)[String(index + 1)];
-				return [
-					explanationKey(item),
-					explanation === undefined ? DEFAULT_EXPLANATION : JSON.stringify(explanation),
-				];
-			}),
-		);
-	} catch {
-		return null;
-	}
-}
-
-function parseTextExplanations(rawText: string, items: Item[]): Record<string, string> {
-	const numberedExplanations = rawText
-		.split(/\n+/)
-		.map((line) => line.trim().match(/^\d+\.\s*(.+)$/)?.[1])
-		.filter((line): line is string => Boolean(line));
-	const explanations =
-		numberedExplanations.length > 0
-			? numberedExplanations
-			: rawText.split(/(?:\n\s*[-•*]\s*|\n\s*\d+\.\s*)/).filter(Boolean);
-
-	return Object.fromEntries(
-		items.map((item, index) => [explanationKey(item), explanations[index] ?? DEFAULT_EXPLANATION]),
-	);
-}
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
+	const requestLog = startRequestLog(req, "/api/batch-explain");
 	try {
 		const body = await req.json().catch(() => null);
 		const parsed = batchExplainSchema.safeParse(body);
 
 		if (!parsed.success) {
-			return NextResponse.json({ error: "Invalid input." }, { status: 400 });
+			finishRequestLog(requestLog, 400);
+			return NextResponse.json(
+				{ error: "Invalid input." },
+				{ status: 400, headers: getRequestHeaders(requestLog) },
+			);
 		}
 
 		const supabase = await createClient();
 		const access = await checkAiAccess(supabase as unknown as AiAccessClient, "batch-explain");
 		if (!access.allowed) {
+			finishRequestLog(requestLog, access.status);
 			return NextResponse.json(
 				{ error: access.error },
-				{ status: access.status, headers: getAiQuotaHeaders(access) },
+				{
+					status: access.status,
+					headers: { ...getRequestHeaders(requestLog), ...getAiQuotaHeaders(access) },
+				},
 			);
 		}
 
 		const items: Item[] = parsed.data;
 		const prompt = makeBatchPrompt(items);
-		const fullPrompt = `${VALUE_ANALYSIS_SYSTEM_PROMPT}\n\n${prompt}`;
-		const res = await fetch(`${GEMINI_API_URL}?key=${env.GEMINI_API_KEY}`, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
+		const geminiClient = new GeminiClient(env.GEMINI_API_KEY, { attempts: 1, timeoutMs: 6_000 });
+		let explanations: Record<string, string>;
+		try {
+			const rawText = await geminiClient.generateContent(
+				[
+					{ role: "system", parts: [{ text: VALUE_ANALYSIS_SYSTEM_PROMPT }] },
+					{ role: "user", parts: [{ text: prompt }] },
+				],
+				{ responseMimeType: "application/json", maxOutputTokens: 8192 },
+				{ signal: req.signal, requestId: requestLog.requestId },
+			);
+			explanations = fillMissingMetricExplanations(
+				parseMetricExplanationResponse(rawText, items),
+				items,
+			);
+		} catch (error) {
+			if (req.signal.aborted) throw error;
+			logger.warn("batch_explain.provider_fallback", {
+				requestId: requestLog.requestId,
+				errorName: error instanceof Error ? error.name : "UnknownError",
+				providerStatus: error instanceof GeminiApiError ? error.status : undefined,
+			});
+			explanations = Object.fromEntries(
+				items.map((item) => [
+					`${item.symbol}_${item.metric}`,
+					createMetricExplanationFallback(item),
+				]),
+			);
+		}
+		finishRequestLog(requestLog, 200, { itemCount: items.length });
+		return NextResponse.json(
+			{ explanations },
+			{
+				headers: {
+					"Cache-Control": "private, no-store",
+					...getRequestHeaders(requestLog),
+					...getAiQuotaHeaders(access),
+				},
 			},
-			body: JSON.stringify({
-				contents: [{ parts: [{ text: fullPrompt }] }],
-			}),
-		});
-
-		if (!res.ok) {
-			logger.error("batch_explain.provider_failed", new Error(res.statusText), {
-				status: res.status,
-				itemCount: items.length,
-			});
-
-			if (res.status === 429) {
-				return NextResponse.json(
-					{ error: "The explanation service is temporarily rate limited." },
-					{ status: 429 },
-				);
-			}
-
-			return NextResponse.json({ error: "Unable to generate explanations." }, { status: 502 });
-		}
-
-		const providerResponse = geminiTextResponseSchema.safeParse(await res.json());
-		if (!providerResponse.success) {
-			logger.error("batch_explain.invalid_provider_response", providerResponse.error, {
-				itemCount: items.length,
-			});
-			return NextResponse.json({ error: "Unable to generate explanations." }, { status: 502 });
-		}
-
-		const rawText = providerResponse.data.candidates[0].content.parts[0].text;
-		const explanations =
-			parseStructuredExplanations(rawText, items) ?? parseTextExplanations(rawText, items);
-		return NextResponse.json({ explanations }, { headers: getAiQuotaHeaders(access) });
+		);
 	} catch (error) {
-		logger.error("batch_explain.request_failed", error);
-		return NextResponse.json({ error: "Server error." }, { status: 500 });
+		logger.error("batch_explain.request_failed", error, { requestId: requestLog.requestId });
+		const status = getGeminiResponseStatus(error);
+		const message =
+			status === 429
+				? "The explanation service is temporarily rate limited."
+				: "Unable to generate explanations.";
+		finishRequestLog(requestLog, status);
+		return NextResponse.json(
+			{ error: message },
+			{ status, headers: getRequestHeaders(requestLog) },
+		);
 	}
 }

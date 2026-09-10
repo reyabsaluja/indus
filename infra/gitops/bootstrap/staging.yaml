@@ -1,0 +1,17 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: indus-applications
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/TryIndus/indus.git
+    targetRevision: main
+    path: infra/helm/indus-applications
+    helm: { valueFiles: [values-staging.yaml] }
+  destination: { server: "https://kubernetes.default.svc", namespace: argocd }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ServerSideApply=true]

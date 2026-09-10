@@ -1,0 +1,8 @@
+environment: staging
+clusterName: indus-staging
+vpcId: vpc-replace-staging
+awsRegion: ca-central-1
+roles:
+  loadBalancer: arn:aws:iam::333333333333:role/indus-staging-load-balancer
+  otelCollector: arn:aws:iam::333333333333:role/indus-staging-otel-collector
+prometheusRemoteWriteUrl: https://aps-workspaces.ca-central-1.amazonaws.com/workspaces/replace-staging/api/v1/remote_write

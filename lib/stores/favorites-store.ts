@@ -6,7 +6,7 @@ import { create } from "zustand";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { createClient } from "@/lib/supabase/client";
 
-export interface FavoriteStock {
+interface FavoriteStock {
 	symbol: string;
 	name: string;
 	addedAt: Date;
@@ -24,7 +24,7 @@ interface FavoriteMutationInput {
 	name: string;
 }
 
-export const useFavoritesStore = create<FavoritesState>((set) => ({
+const useFavoritesStore = create<FavoritesState>((set) => ({
 	favorites: [],
 	setFavorites: (favorites) => set({ favorites }),
 	addFavorite: (favorite) =>

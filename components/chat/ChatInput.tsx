@@ -1,21 +1,21 @@
 "use client";
 
-import { Send } from "lucide-react";
+import { Send, Square } from "lucide-react";
 import type React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 interface ChatInputProps {
 	onSendMessage: (message: string) => void;
 	sending: boolean;
+	onStop: () => void;
 }
 
-export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, sending }) => {
+export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, sending, onStop }) => {
 	const [message, setMessage] = useState("");
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-	// Auto-resize textarea
-	useEffect(() => {
+	const resizeTextarea = useCallback(() => {
 		const textarea = textareaRef.current;
 		if (textarea) {
 			textarea.style.height = "auto";
@@ -25,11 +25,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, sending }) 
 		}
 	}, []);
 
+	useLayoutEffect(resizeTextarea, [resizeTextarea]);
+
 	const handleSend = () => {
 		const trimmedMessage = message.trim();
 		if (trimmedMessage && !sending) {
 			onSendMessage(trimmedMessage);
 			setMessage("");
+			requestAnimationFrame(resizeTextarea);
 		}
 	};
 
@@ -50,16 +53,18 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, sending }) 
 	};
 
 	return (
-		<div className="border-t border-zinc-800 px-3 pt-3 pb-2 flex flex-col gap-2">
+		<div className="border-t border-border/70 px-4 pb-3 pt-3 sm:px-5">
 			<div className="flex items-end gap-2">
 				<textarea
 					ref={textareaRef}
 					value={message}
-					onChange={(e) => setMessage(e.target.value)}
+					onChange={(e) => {
+						setMessage(e.target.value);
+						requestAnimationFrame(resizeTextarea);
+					}}
 					onKeyDown={handleKeyDown}
-					placeholder="Ask about this metric or any other financial data..."
-					className="flex-1 resize-none bg-zinc-900/70 border border-zinc-800 focus-visible:ring-1 focus-visible:ring-emerald-500/60 focus-visible:border-emerald-500/60 rounded-md px-3 py-2 text-sm leading-snug max-h-40 overflow-auto text-zinc-200 placeholder:text-zinc-500 scrollbar-none"
-					disabled={sending}
+					placeholder="Ask a question about this company…"
+					className="scrollbar-none max-h-40 min-h-11 flex-1 resize-none overflow-auto rounded-xl border border-border bg-background/70 px-3 py-3 text-sm leading-snug text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/15"
 					rows={1}
 					style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
 				/>
@@ -68,11 +73,22 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, sending }) 
 					size="icon"
 					onClick={handleSend}
 					disabled={!message.trim() || sending}
-					className="h-10 w-10 bg-emerald-600 hover:bg-emerald-700 disabled:bg-zinc-800 disabled:text-zinc-500"
+					className="size-11 rounded-xl"
+					aria-label="Send question"
 				>
-					<Send className="h-4 w-4" />
+					<Send className="size-4" />
 				</Button>
 			</div>
+			{sending && (
+				<button
+					type="button"
+					onClick={onStop}
+					className="mx-auto mt-2 inline-flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+				>
+					<Square className="size-2.5 fill-current" />
+					Stop generating
+				</button>
+			)}
 		</div>
 	);
 };

@@ -1,0 +1,20 @@
+account_id        = "444444444444"
+aws_region        = "ca-central-1"
+vpc_cidr          = "10.40.0.0/16"
+domain_name       = "app.indus.example.com"
+route53_zone_name = "indus.example.com"
+legacy_origin_hostname     = "legacy-indus.vercel.app"
+replacement_traffic_weight = 0
+cognito_callback_urls = ["https://app.indus.example.com/auth/callback"]
+cognito_logout_urls   = ["https://app.indus.example.com/"]
+alert_email_endpoints = ["on-call@example.com"]
+
+shared_ecr_repository_arns = {
+  platform-api = "arn:aws:ecr:us-east-1:111111111111:repository/indus/platform-api", market-data = "arn:aws:ecr:us-east-1:111111111111:repository/indus/market-data",
+  research-worker = "arn:aws:ecr:us-east-1:111111111111:repository/indus/research-worker", web = "arn:aws:ecr:us-east-1:111111111111:repository/indus/web"
+}
+shared_ecr_repository_urls = {
+  platform-api = "111111111111.dkr.ecr.us-east-1.amazonaws.com/indus/platform-api", market-data = "111111111111.dkr.ecr.us-east-1.amazonaws.com/indus/market-data",
+  research-worker = "111111111111.dkr.ecr.us-east-1.amazonaws.com/indus/research-worker", web = "111111111111.dkr.ecr.us-east-1.amazonaws.com/indus/web"
+}
+tags = { CostCenter = "engineering", Owner = "platform", DataClassification = "confidential" }

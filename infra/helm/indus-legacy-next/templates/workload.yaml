@@ -1,0 +1,162 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: indus-legacy-next
+  labels:
+    {{- include "indus-legacy-next.labels" . | nindent 4 }}
+  annotations:
+    eks.amazonaws.com/role-arn: {{ .Values.serviceAccountRoleArn | quote }}
+automountServiceAccountToken: true
+---
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: indus-legacy-next
+  labels:
+    {{- include "indus-legacy-next.labels" . | nindent 4 }}
+spec:
+  provider: aws
+  parameters:
+    region: {{ .Values.awsRegion | quote }}
+    objects: |
+      - objectName: {{ .Values.runtimeSecretArn | quote }}
+        objectType: secretsmanager
+        jmesPath:
+          - path: "NEXT_PUBLIC_SUPABASE_URL"
+            objectAlias: "NEXT_PUBLIC_SUPABASE_URL"
+          - path: "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+            objectAlias: "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+          - path: "ALPACA_API_KEY"
+            objectAlias: "ALPACA_API_KEY"
+          - path: "ALPACA_SECRET_KEY"
+            objectAlias: "ALPACA_SECRET_KEY"
+          - path: "GEMINI_API_KEY"
+            objectAlias: "GEMINI_API_KEY"
+  secretObjects:
+    - secretName: indus-legacy-next-runtime
+      type: Opaque
+      data:
+        - objectName: "NEXT_PUBLIC_SUPABASE_URL"
+          key: "NEXT_PUBLIC_SUPABASE_URL"
+        - objectName: "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+          key: "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+        - objectName: "ALPACA_API_KEY"
+          key: "ALPACA_API_KEY"
+        - objectName: "ALPACA_SECRET_KEY"
+          key: "ALPACA_SECRET_KEY"
+        - objectName: "GEMINI_API_KEY"
+          key: "GEMINI_API_KEY"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: indus-legacy-next
+  labels:
+    {{- include "indus-legacy-next.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  revisionHistoryLimit: 5
+  minReadySeconds: 15
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: indus-legacy-next
+  template:
+    metadata:
+      labels:
+        {{- include "indus-legacy-next.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: indus-legacy-next
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: application
+          image: {{ .Values.image | quote }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 3000, protocol: TCP }
+          envFrom:
+            - secretRef: { name: indus-legacy-next-runtime }
+          env:
+            - { name: NODE_ENV, value: production }
+            - { name: PORT, value: "3000" }
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          startupProbe:
+            httpGet: { path: "/api/health?mode=ready", port: http }
+            failureThreshold: 30
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: "/api/health?mode=live", port: http }
+            periodSeconds: 15
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet: { path: "/api/health?mode=ready", port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+          volumeMounts:
+            - { name: runtime-secret, mountPath: /mnt/secrets-store, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: runtime-secret
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes: { secretProviderClass: indus-legacy-next }
+        - name: tmp
+          emptyDir: { sizeLimit: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: indus-legacy-next
+  labels:
+    {{- include "indus-legacy-next.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: indus-legacy-next
+  ports:
+    - { name: http, port: 3000, targetPort: http, protocol: TCP }
+---
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: indus-legacy-next
+spec:
+  serviceRef: { name: indus-legacy-next, port: http }
+  targetGroupARN: {{ .Values.targetGroupArn | quote }}
+  targetType: ip
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: indus-legacy-next
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: indus-legacy-next
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: indus-legacy-next
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: indus-legacy-next }
+  minReplicas: {{ .Values.minReplicas }}
+  maxReplicas: {{ .Values.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 65 }

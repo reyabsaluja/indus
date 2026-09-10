@@ -58,8 +58,14 @@ const MetricNameHover: React.FC<MetricNameHoverProps> = ({ metricName, children 
 
 	return (
 		<HoverCard openDelay={100} closeDelay={100}>
-			<HoverCardTrigger className="cursor-help underline decoration-dotted decoration-2 underline-offset-2">
-				{children}
+			<HoverCardTrigger asChild>
+				<button
+					type="button"
+					className="cursor-help rounded-sm text-left underline decoration-dotted decoration-2 underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+					aria-label={`${metricName}: show definition`}
+				>
+					{children}
+				</button>
 			</HoverCardTrigger>
 			<HoverCardContent className="max-w-sm w-80 text-sm p-4">{renderContent()}</HoverCardContent>
 		</HoverCard>

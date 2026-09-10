@@ -1,0 +1,69 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: indus-require-immutable-images
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["apps"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["deployments", "statefulsets", "daemonsets"]
+      - apiGroups: ["batch"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["jobs", "cronjobs"]
+  validations:
+    - expression: >-
+        object.kind == 'CronJob'
+          ? object.spec.jobTemplate.spec.template.spec.containers.all(c, c.image.contains('@sha256:'))
+          : object.spec.template.spec.containers.all(c, c.image.contains('@sha256:'))
+      message: Workload images must use an immutable sha256 digest.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: indus-require-immutable-images
+spec:
+  policyName: indus-require-immutable-images
+  validationActions: [Deny, Audit]
+  matchResources:
+    namespaceSelector:
+      matchLabels: { indus.dev/workloads: "true" }
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: indus-require-container-confinement
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["apps", "batch"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["deployments", "statefulsets", "daemonsets", "jobs"]
+  variables:
+    - name: pod
+      expression: object.spec.template.spec
+  validations:
+    - expression: variables.pod.containers.all(c, has(c.securityContext) && c.securityContext.runAsNonRoot == true)
+      message: Every container must run as non-root.
+    - expression: variables.pod.containers.all(c, has(c.securityContext.readOnlyRootFilesystem) && c.securityContext.readOnlyRootFilesystem == true)
+      message: Every container must have a read-only root filesystem.
+    - expression: variables.pod.containers.all(c, has(c.securityContext.allowPrivilegeEscalation) && c.securityContext.allowPrivilegeEscalation == false)
+      message: Every container must disable privilege escalation.
+    - expression: variables.pod.containers.all(c, has(c.securityContext.capabilities) && c.securityContext.capabilities.drop.exists(cap, cap == 'ALL'))
+      message: Every container must drop all Linux capabilities.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: indus-require-container-confinement
+spec:
+  policyName: indus-require-container-confinement
+  validationActions: [Deny, Audit]
+  matchResources:
+    namespaceSelector:
+      matchLabels: { indus.dev/workloads: "true" }

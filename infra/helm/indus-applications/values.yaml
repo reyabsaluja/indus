@@ -1,0 +1,10 @@
+environment: development
+repository: https://github.com/TryIndus/indus.git
+revision: main
+clusterName: replace-me
+vpcId: vpc-replace-me
+awsRegion: ca-central-1
+roles:
+  loadBalancer: arn:aws:iam::000000000000:role/replace-load-balancer
+  otelCollector: arn:aws:iam::000000000000:role/replace-otel
+prometheusRemoteWriteUrl: https://aps-workspaces.ca-central-1.amazonaws.com/workspaces/replace-me/api/v1/remote_write

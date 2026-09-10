@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["environment", "aws", "identity", "images", "roles", "secrets", "config"],
+  "properties": {
+    "environment": { "enum": ["development", "staging", "production"] },
+    "aws": {
+      "type": "object",
+      "required": ["region", "vpcCidr", "webBucket", "cloudfrontDistributionId", "targetGroups"],
+      "properties": {
+        "region": { "type": "string", "minLength": 3 },
+        "vpcCidr": { "type": "string", "pattern": "^[0-9.]+/[0-9]+$" },
+        "webBucket": { "type": "string", "minLength": 3 },
+        "cloudfrontDistributionId": { "type": "string", "minLength": 3 },
+        "targetGroups": {
+          "type": "object",
+          "required": ["platformApi", "marketData"],
+          "properties": {
+            "platformApi": { "type": "string", "pattern": "^arn:aws[a-z-]*:elasticloadbalancing:" },
+            "marketData": { "type": "string", "pattern": "^arn:aws[a-z-]*:elasticloadbalancing:" }
+          }
+        }
+      }
+    },
+    "identity": { "type": "object", "required": ["issuer", "audience"] },
+    "images": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "pattern": "@sha256:[a-f0-9]{64}$" },
+      "required": ["platformApi", "marketData", "researchWorker", "web"]
+    },
+    "roles": {
+      "type": "object",
+      "required": [
+        "platformApi",
+        "sidekiq",
+        "platformOutbox",
+        "reportsConsumer",
+        "marketData",
+        "researchWorker",
+        "databaseMigrator",
+        "webPublisher"
+      ],
+      "additionalProperties": { "type": "string", "pattern": "^arn:aws[a-z-]*:iam::[0-9]{12}:role/" }
+    },
+    "secrets": {
+      "type": "object",
+      "required": ["platformApi", "marketData", "researchWorker", "databaseMigration"],
+      "additionalProperties": { "type": "string", "pattern": "^arn:aws[a-z-]*:secretsmanager:" }
+    },
+    "config": {
+      "type": "object",
+      "required": ["redisEndpoint", "redisPort", "redisCacheName", "redisUser"],
+      "properties": {
+        "redisEndpoint": { "type": "string", "minLength": 3, "pattern": "^[A-Za-z0-9.-]+$" },
+        "redisPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "redisCacheName": { "type": "string", "minLength": 1 },
+        "redisUser": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

@@ -59,4 +59,4 @@ export ALPACA_IS_PAPER="${ALPACA_IS_PAPER:-true}"
 export GEMINI_API_KEY="${GEMINI_API_KEY:-test-gemini-key}"
 
 bun run build
-bunx playwright test --grep @authenticated --project=chromium
+bunx playwright test --grep @authenticated --project=chromium --workers=1

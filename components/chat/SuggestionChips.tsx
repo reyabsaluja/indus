@@ -5,24 +5,39 @@ import { Button } from "@/components/ui/button";
 
 interface SuggestionChipsProps {
 	onSendMessage: (message: string) => void;
+	triggerMetric?: string;
 }
 
-export const SuggestionChips: React.FC<SuggestionChipsProps> = ({ onSendMessage }) => {
-	const suggestions = ["Explain valuation", "Compare margins", "Debt risk?"];
+export const SuggestionChips: React.FC<SuggestionChipsProps> = ({
+	onSendMessage,
+	triggerMetric,
+}) => {
+	const suggestions = triggerMetric
+		? [
+				`Explain ${triggerMetric.toLowerCase()}`,
+				"Connect it to the other metrics",
+				"What should I examine next?",
+			]
+		: ["Summarize the strongest signal", "Where is the tension?", "What should I examine next?"];
 
 	return (
-		<div className="flex flex-wrap gap-2 mt-2">
-			{suggestions.map((suggestion) => (
-				<Button
-					key={suggestion}
-					variant="ghost"
-					size="sm"
-					onClick={() => onSendMessage(suggestion)}
-					className="text-xs px-2 py-1 rounded-md bg-zinc-800/70 hover:bg-zinc-700/70 border border-zinc-700/40 text-zinc-300 hover:text-zinc-100"
-				>
-					{suggestion}
-				</Button>
-			))}
+		<div>
+			<p className="mb-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+				Suggested questions
+			</p>
+			<div className="flex flex-wrap gap-2">
+				{suggestions.map((suggestion) => (
+					<Button
+						key={suggestion}
+						variant="ghost"
+						size="sm"
+						onClick={() => onSendMessage(suggestion)}
+						className="h-auto rounded-full border border-border bg-background/70 px-3 py-1.5 text-[10px] text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
+					>
+						{suggestion}
+					</Button>
+				))}
+			</div>
 		</div>
 	);
 };

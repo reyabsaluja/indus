@@ -1,13 +1,8 @@
 "use client";
 
-import PriceChart from "@/components/PriceChart";
+import PriceChart, { type PriceChartProps } from "@/components/PriceChart";
 
-export interface StockChartProps {
-	symbol: string;
-	height?: number;
-	className?: string;
-	showControls?: boolean;
-}
+export interface StockChartProps extends Omit<PriceChartProps, "type"> {}
 
 export default function StockChart(props: StockChartProps) {
 	return <PriceChart {...props} type="stock" />;

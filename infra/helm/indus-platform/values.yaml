@@ -1,0 +1,99 @@
+environment: development
+aws:
+  region: ca-central-1
+  vpcCidr: 10.20.0.0/16
+  prometheusRemoteWriteUrl: https://aps-workspaces.ca-central-1.amazonaws.com/workspaces/replace-me/api/v1/remote_write
+  webBucket: replace-me
+  cloudfrontDistributionId: replace-me
+  targetGroups:
+    platformApi: arn:aws:elasticloadbalancing:ca-central-1:000000000000:targetgroup/replace-api/0000000000000000
+    marketData: arn:aws:elasticloadbalancing:ca-central-1:000000000000:targetgroup/replace-stream/0000000000000000
+
+identity:
+  issuer: https://cognito-idp.ca-central-1.amazonaws.com/replace-me
+  audience: replace-me
+
+images:
+  platformApi: 000000000000.dkr.ecr.us-east-1.amazonaws.com/indus/platform-api@sha256:0000000000000000000000000000000000000000000000000000000000000000
+  marketData: 000000000000.dkr.ecr.us-east-1.amazonaws.com/indus/market-data@sha256:0000000000000000000000000000000000000000000000000000000000000000
+  researchWorker: 000000000000.dkr.ecr.us-east-1.amazonaws.com/indus/research-worker@sha256:0000000000000000000000000000000000000000000000000000000000000000
+  web: 000000000000.dkr.ecr.us-east-1.amazonaws.com/indus/web@sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+roles:
+  platformApi: arn:aws:iam::000000000000:role/replace-platform-api
+  sidekiq: arn:aws:iam::000000000000:role/replace-sidekiq
+  platformOutbox: arn:aws:iam::000000000000:role/replace-platform-outbox
+  reportsConsumer: arn:aws:iam::000000000000:role/replace-reports-consumer
+  marketData: arn:aws:iam::000000000000:role/replace-market-data
+  researchWorker: arn:aws:iam::000000000000:role/replace-research-worker
+  databaseMigrator: arn:aws:iam::000000000000:role/replace-database-migrator
+  webPublisher: arn:aws:iam::000000000000:role/replace-web-publisher
+
+secrets:
+  platformApi: arn:aws:secretsmanager:ca-central-1:000000000000:secret:replace-platform-api
+  marketData: arn:aws:secretsmanager:ca-central-1:000000000000:secret:replace-market-data
+  researchWorker: arn:aws:secretsmanager:ca-central-1:000000000000:secret:replace-research-worker
+  databaseMigration: arn:aws:secretsmanager:ca-central-1:000000000000:secret:replace-database-migration
+
+config:
+  rdsProxyEndpoint: replace.proxy.ca-central-1.rds.amazonaws.com
+  redisEndpoint: replace.serverless.cac1.cache.amazonaws.com
+  redisPort: 6379
+  redisCacheName: indus-development
+  redisUser: indus-development-app
+  mskBootstrapBrokers: replace.kafka-serverless.ca-central-1.amazonaws.com:9098
+  artifactBucket: replace-artifacts
+  rawEventsBucket: replace-raw-events
+  temporalAddress: replace.tmprl.cloud:7233
+  temporalNamespace: development.indus
+
+platformApi:
+  replicas: 2
+  minReplicas: 2
+  maxReplicas: 6
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: "1", memory: 1Gi }
+
+sidekiq:
+  replicas: 2
+  minReplicas: 2
+  maxReplicas: 8
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: "1", memory: 1Gi }
+
+marketData:
+  replicas: 2
+  minReplicas: 2
+  maxReplicas: 10
+  ingestionEnabled: true
+  symbols: AAPL,MSFT,SPY,BTC/USD,ETH/USD
+  resources:
+    requests: { cpu: 500m, memory: 512Mi }
+    limits: { cpu: "2", memory: 1Gi }
+
+researchWorker:
+  replicas: 2
+  minReplicas: 2
+  maxReplicas: 8
+  resources:
+    requests: { cpu: 500m, memory: 768Mi }
+    limits: { cpu: "2", memory: 2Gi }
+
+platformOutbox:
+  replicas: 2
+  resources:
+    requests: { cpu: 200m, memory: 384Mi }
+    limits: { cpu: "1", memory: 768Mi }
+
+reportsConsumer:
+  replicas: 2
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: "1", memory: 1Gi }
+
+webPublisher:
+  releaseId: replace-with-git-sha
+
+podAnnotations: {}

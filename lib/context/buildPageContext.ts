@@ -1,24 +1,5 @@
-import { getCachedExplanation } from "@/hooks/useExplanation";
 import type { FinancialData, MetricGroups, PageChartData, PageContext } from "@/lib/types";
 
-const CONTEXT_METRIC_KEYS = [
-	"market_cap",
-	"enterprise_value",
-	"shares_outstanding",
-	"revenue",
-	"employees",
-	"pe_ratio",
-	"forward_pe",
-	"price_to_book",
-	"price_to_sales",
-	"ev_to_sales",
-	"ev_to_ebitda",
-	"gross_margin",
-	"ebitda_margin",
-	"operating_margin",
-	"net_margin",
-] as const;
-const MAX_EXPLANATION_LENGTH = 280;
 const MAX_CONTEXT_SIZE_KB = 25;
 
 interface BuildContextParams {
@@ -78,20 +59,9 @@ export function buildPageContext({
 		},
 	};
 
-	const cachedExplanations: Record<string, string> = {};
-
-	for (const metricKey of CONTEXT_METRIC_KEYS) {
-		const cached = getCachedExplanation(financialData.symbol, metricKey);
-		if (cached) {
-			cachedExplanations[metricKey] =
-				cached.length > MAX_EXPLANATION_LENGTH
-					? `${cached.substring(0, MAX_EXPLANATION_LENGTH)}...`
-					: cached;
-		}
-	}
-
 	const chart = chartData?.points
 		? {
+				range: chartData.range ?? "Unknown",
 				interval: chartData.interval ?? "1d",
 				points: chartData.points.slice(-50).map((point) => ({
 					t: point.t,
@@ -102,7 +72,7 @@ export function buildPageContext({
 					v: point.v,
 				})),
 				latestPrice: chartData.latestPrice ?? financialData.regularMarketPrice ?? 0,
-				dayChangePct: chartData.dayChangePct ?? financialData.regularMarketChangePercent ?? 0,
+				rangeChangePct: chartData.rangeChangePct ?? financialData.regularMarketChangePercent ?? 0,
 			}
 		: undefined;
 
@@ -112,7 +82,6 @@ export function buildPageContext({
 		asOf: new Date().toISOString(),
 		metricGroups,
 		chart,
-		cachedExplanations,
 		trigger: triggerMetric,
 	};
 }
@@ -121,17 +90,8 @@ export function trimContextIfNeeded(context: PageContext): PageContext {
 	const sizeKB = new TextEncoder().encode(JSON.stringify(context)).byteLength / 1024;
 
 	if (sizeKB > MAX_CONTEXT_SIZE_KB) {
-		const explanationEntries = Object.entries(context.cachedExplanations);
-		const trimmedExplanations: Record<string, string> = {};
-
-		for (let i = 0; i < Math.min(10, explanationEntries.length); i++) {
-			const [key, value] = explanationEntries[i];
-			trimmedExplanations[key] = value.length > 200 ? `${value.substring(0, 200)}...` : value;
-		}
-
 		return {
 			...context,
-			cachedExplanations: trimmedExplanations,
 			chart: context.chart
 				? {
 						...context.chart,
