@@ -20,7 +20,7 @@ Incoming request cancellation propagates through retry and cache boundaries. Fet
 
 Gemini requests use low thinking effort and omit deprecated sampling parameters. General responses allow 4,096 output tokens; reports and batched metric explanations allow 8,192. Non-streaming responses join every non-thinking text part and reject non-`STOP` finish reasons.
 
-Research reports use a versioned JSON document contract validated by Zod. The server retrieves up to five symbol-related Yahoo Finance articles published within the previous 30 days and rejects stale, unrelated, future-dated, malformed, or non-HTTP sources. Gemini may analyze potential impact, but source headlines, publishers, dates, and links are restored from trusted server data before storage. Application code owns headings, typography, the educational disclaimer, and PDF layout. Model-authored Markdown, HTML, or LaTeX is neither requested nor executed. Completed reports download through an authenticated tenant-scoped PDF route.
+New reports use a versioned JSON document contract validated by Zod. The server retrieves up to five symbol-related Yahoo Finance articles published within the previous 30 days and rejects stale, unrelated, future-dated, malformed, or non-HTTP sources. Gemini may analyze potential impact, but source headlines, publishers, dates, and links are restored from trusted server data before storage. Application code owns headings, typography, the educational disclaimer, and PDF layout. Model-authored Markdown, HTML, or LaTeX is neither requested nor executed. Completed reports download through an authenticated tenant-scoped PDF route. Older complete Markdown reports remain readable and exportable through a compatibility renderer, while truncated legacy records remain marked incomplete.
 
 ## Rate limits
 
@@ -32,7 +32,7 @@ Database-backed per-user quotas remain authoritative for Gemini-backed routes. P
 | `/api/alpaca` | 90 requests per IP per minute |
 | `/api/stream/[symbol]` | 30 connection attempts per IP per minute |
 
-Public-route limits reduce accidental bursts and provider amplification. Distributed limits use the shared Redis boundary when global enforcement is required.
+Public-route limits reduce accidental bursts and provider amplification within each warm runtime. They are not a globally consistent abuse boundary across multiple Vercel instances. A future strict distributed limit must use durable shared storage.
 
 Rate-limited responses use `429`, `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset`.
 
