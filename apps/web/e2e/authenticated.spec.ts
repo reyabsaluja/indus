@@ -31,13 +31,35 @@ test('renders queryless crypto navigation', async ({ page }) => {
   await expect(page).toHaveURL(/\/crypto$/)
   await expect(page.getByRole('heading', { name: 'Crypto markets', exact: true })).toBeVisible()
   await expect(page.getByText('Bitcoin')).toBeVisible()
-  await expect(page.getByRole('status')).toContainText('Live prices are unavailable')
+  await expect(page.getByRole('status')).toContainText('Feed stale')
 })
 
 test('renders authenticated reports navigation', async ({ page }) => {
   await page.goto('/reports')
   await expect(page.getByRole('heading', { name: 'Reports', exact: true })).toBeVisible()
   await expect(page.getByText('Microsoft research')).toBeVisible()
+})
+
+test('cancels an active report through the idempotent Rails boundary', async ({ page }) => {
+  const id = '00000000-0000-4000-8000-000000000009'
+  const active = { id, symbol: 'AAPL', title: 'Apple research', status: 'generating',
+    created_at: '2026-08-05T12:00:00.000Z', updated_at: '2026-08-05T12:00:00.000Z' }
+  await page.unroute('**/v1/reports?*')
+  await page.route('**/v1/reports?*', route => route.fulfill({
+    contentType: 'application/json', body: JSON.stringify({ next_cursor: null, items: [active] }),
+  }))
+  await page.route(`**/v1/reports/${id}/cancel`, async route => {
+    expect(route.request().method()).toBe('POST')
+    expect(route.request().headers().authorization).toBe('Bearer e2e-access-token')
+    expect(route.request().headers()['idempotency-key']).toMatch(/^[0-9a-f-]{36}$/)
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ...active, status: 'cancelled' }) })
+  })
+
+  await page.goto('/reports')
+  await page.getByRole('button', { name: 'Cancel' }).click()
+
+  await expect(page.getByText('cancelled')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Cancel' })).toHaveCount(0)
 })
 
 test('authenticated dashboard has no serious accessibility violations', async ({ page }) => {

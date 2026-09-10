@@ -1,0 +1,31 @@
+#!/usr/bin/env ruby
+require "json"
+require "optparse"
+require "time"
+require_relative "../config/environment"
+
+options = { event_ids: [], failed: false, include_published: false, limit: 100, execute: false }
+parser = OptionParser.new do |cli|
+  cli.banner = "Usage: bin/outbox-replay [selectors] [--execute]"
+  cli.on("--event-id UUID", "Select an event ID; may be repeated") { |value| options[:event_ids] << value }
+  cli.on("--topic TOPIC", "Select events for one Kafka topic") { |value| options[:topic] = value }
+  cli.on("--failed", "Select events that retain an outbox delivery error") { options[:failed] = true }
+  cli.on("--created-before TIME", "Select events created at or before an ISO-8601 time") do |value|
+    options[:created_before] = Time.iso8601(value)
+  end
+  cli.on("--include-published", "Allow selected published events to be requeued") { options[:include_published] = true }
+  cli.on("--limit COUNT", Integer, "Bound the selection (maximum 1000)") { |value| options[:limit] = value }
+  cli.on("--execute", "Persist the requeue; the default is a preview") { options[:execute] = true }
+end
+
+begin
+  parser.parse!
+  raise OptionParser::InvalidArgument, "unexpected arguments: #{ARGV.join(" ")}" if ARGV.any?
+
+  result = Events::OutboxReplay.new.call(**options)
+  puts JSON.pretty_generate(matched: result.event_ids.length, event_ids: result.event_ids, executed: result.executed)
+rescue OptionParser::ParseError, Events::OutboxReplay::SelectionError, ArgumentError => error
+  warn error.message
+  warn parser
+  exit 64
+end

@@ -164,6 +164,21 @@ RSpec.describe "OpenAPI product boundaries", type: :request do
     expect(OutboxEvent.last.payload).to include("focus" => "Revenue durability")
   end
 
+  it "cancels an owned report and its stable Temporal workflow" do
+    user = User.find_or_create_by!(issuer: claims["iss"], external_subject: claims["sub"]) do |record|
+      record.email = claims["email"]
+      record.display_name = "Contract"
+    end
+    report = user.reports.create!(symbol: "AAPL", title: "AAPL research", status: "generating", workflow_id: "report-1")
+    temporal = instance_double(Reports::TemporalClient, cancel_report: true)
+    allow(Reports::TemporalClient).to receive(:from_env).and_return(temporal)
+    post "/v1/reports/#{report.id}/cancel", headers: write_headers
+    expect(response).to have_http_status(:ok)
+    expect(JSON.parse(response.body)).to include("status" => "cancelled")
+    expect(temporal).to have_received(:cancel_report).with("report-1")
+    expect(OutboxEvent.last.payload).to include("status" => "cancelled", "previous_status" => "generating")
+  end
+
   it "maps duplicate owned resources to a conflict" do
     post "/v1/favorites", params: { symbol: "AAPL", instrument_type: "equity" }, headers: write_headers
     post "/v1/favorites", params: { symbol: "AAPL", instrument_type: "equity" },

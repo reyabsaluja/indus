@@ -1,5 +1,6 @@
 require "rails_helper"
 require "cgi"
+require Rails.root.join("app/services/fundamentals_provider")
 
 RSpec.describe "security and failure boundaries", type: :request do
   let(:claims) { { "iss" => "https://example.supabase.co/auth/v1", "sub" => "boundary-user", "email" => "boundary@example.test" } }
@@ -44,7 +45,7 @@ RSpec.describe "security and failure boundaries", type: :request do
     user = User.create!(issuer: claims.fetch("iss"), external_subject: claims.fetch("sub"),
       email: claims.fetch("email"), display_name: "Boundary")
     AiUsageWindow.create!(user: user, operation: "explanation", window_started_at: Time.current.beginning_of_hour,
-      request_count: ENV.fetch("AI_REQUESTS_PER_HOUR", 30).to_i)
+      request_count: AiUsageLimiter::LIMITS.fetch("explanation").fetch("hour"))
     allow(ModelGateway).to receive(:default)
 
     post "/v1/explanations", params: { symbol: "AAPL", metrics: [ "revenue" ] }, headers: write_headers
@@ -58,8 +59,9 @@ RSpec.describe "security and failure boundaries", type: :request do
   it "commits quota usage when a provider failure rolls back the idempotent response" do
     user = User.create!(issuer: claims.fetch("iss"), external_subject: claims.fetch("sub"),
       email: claims.fetch("email"), display_name: "Boundary")
+    hourly_limit = AiUsageLimiter::LIMITS.fetch("explanation").fetch("hour")
     AiUsageWindow.create!(user_id: user.id, operation: "explanation", window_started_at: Time.current.beginning_of_hour,
-      request_count: ENV.fetch("AI_REQUESTS_PER_HOUR", 30).to_i - 1)
+      request_count: hourly_limit - 1)
     snapshot = FundamentalsSnapshot.new(symbol: "AAPL", as_of: Time.current,
       metrics: { "regularMarketPrice" => 200.0 }, source_reference: "fixture:AAPL")
     allow(FundamentalsProvider).to receive(:default).and_return(instance_double(FundamentalsProvider, fetch: snapshot))
@@ -70,8 +72,8 @@ RSpec.describe "security and failure boundaries", type: :request do
     post "/v1/explanations", params: { symbol: "AAPL", metrics: [ "revenue" ] }, headers: write_headers
     expect(response).to have_http_status(:bad_gateway)
     expect(IdempotencyRecord.count).to eq(0)
-    expect(AiUsageWindow.find_by!(user_id: user.id, operation: "explanation").request_count)
-      .to eq(ENV.fetch("AI_REQUESTS_PER_HOUR", 30).to_i)
+    expect(AiUsageWindow.find_by!(user_id: user.id, operation: "explanation", window_type: "hour").request_count)
+      .to eq(hourly_limit)
 
     post "/v1/explanations", params: { symbol: "AAPL", metrics: [ "revenue" ] }, headers: write_headers
     expect(response).to have_http_status(:too_many_requests)

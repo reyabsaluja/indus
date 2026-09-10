@@ -30,6 +30,71 @@ services:
     volumes:
       - redis-data:/data
 
+  redpanda:
+    profiles: ["distributed"]
+    image: docker.redpanda.com/redpandadata/redpanda:v25.2.1
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp=1
+      - --memory=512M
+      - --reserve-memory=0M
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://127.0.0.1:19092
+    ports:
+      - "127.0.0.1:19092:19092"
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health", "--exit-when-healthy"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  redpanda-init:
+    profiles: ["distributed"]
+    image: docker.redpanda.com/redpandadata/redpanda:v25.2.1
+    entrypoint: ["/bin/bash", "-ec"]
+    command:
+      - >-
+        for topic in market.bars.v1 market.quotes.v1; do
+          rpk topic describe "$${topic}" --brokers redpanda:9092 >/dev/null 2>&1 ||
+          rpk topic create "$${topic}" --brokers redpanda:9092;
+        done
+    depends_on:
+      redpanda:
+        condition: service_healthy
+
+  market-data:
+    profiles: ["distributed"]
+    build:
+      context: ./services/market-data
+    environment:
+      MARKET_BIND_ADDR: 0.0.0.0:8081
+      DATABASE_URL: postgres://indus:indus-local-password@postgres:5432/indus_development
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      KAFKA_TRANSACTIONAL_ID: indus-market-data-local
+      KAFKA_GROUP_ID: indus-market-data-writer-v1
+      KAFKA_SECURITY_PROTOCOL: PLAINTEXT
+      MARKET_JWT_ISSUER: http://127.0.0.1:54321/auth/v1
+      MARKET_JWT_AUDIENCE: authenticated
+      MARKET_JWT_HS256_SECRET: ${MARKET_JWT_HS256_SECRET:-indus-disposable-local-stream-secret}
+      MARKET_INGESTION_ENABLED: "false"
+      MARKET_ALLOWED_ORIGINS: http://127.0.0.1:14173
+    ports:
+      - "127.0.0.1:18081:8081"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8081/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
+
   platform-api:
     profiles: ["application"]
     build:
@@ -55,6 +120,7 @@ services:
       context: ./apps/web
       args:
         VITE_API_URL: http://127.0.0.1:13000
+        VITE_MARKET_STREAM_URL: http://127.0.0.1:18081
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
         VITE_PUBLIC_SUPABASE_KEY: ${VITE_SUPABASE_ANON_KEY:-}
     ports:

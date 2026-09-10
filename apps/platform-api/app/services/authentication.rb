@@ -2,13 +2,20 @@ require "net/http"
 
 module Authentication
   class Unauthorized < StandardError; end
+  class ConfigurationError < StandardError; end
 
   class << self
     attr_writer :verifier
 
     def verifier
-      @verifier ||= SupabaseVerifier.from_env
+      @verifier ||= case ENV.fetch("AUTH_PROVIDER", "supabase")
+      when "supabase" then SupabaseVerifier.from_env
+      when "cognito" then CognitoVerifier.from_env
+      else raise ConfigurationError, "AUTH_PROVIDER must be supabase or cognito"
+      end
     end
+
+    def reset! = @verifier = nil
   end
 
   class TokenVerifier

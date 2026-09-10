@@ -4,11 +4,87 @@ All URIs are relative to *http://localhost*
 
 | Method | HTTP request | Description |
 |------------- | ------------- | -------------|
+| [**cancelReport**](ReportsApi.md#cancelreport) | **POST** /v1/reports/{report_id}/cancel | Request cancellation of a queued or generating report. |
 | [**createReport**](ReportsApi.md#createreportoperation) | **POST** /v1/reports | Start generation of a research report. |
 | [**deleteReport**](ReportsApi.md#deletereport) | **DELETE** /v1/reports/{report_id} | Delete one owned report. |
 | [**getReport**](ReportsApi.md#getreport) | **GET** /v1/reports/{report_id} | Return one report owned by the authenticated user. |
 | [**listReports**](ReportsApi.md#listreports) | **GET** /v1/reports | List reports owned by the authenticated user. |
 
+
+
+## cancelReport
+
+> Report cancelReport(idempotencyKey, reportId)
+
+Request cancellation of a queued or generating report.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ReportsApi,
+} from '';
+import type { CancelReportRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const config = new Configuration({
+    // Configure HTTP bearer authorization: bearerAuth
+    accessToken: "YOUR BEARER TOKEN",
+  });
+  const api = new ReportsApi(config);
+
+  const body = {
+    // string | Unique client-generated key. Reuse with a different payload returns `409`.
+    idempotencyKey: idempotencyKey_example,
+    // string
+    reportId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+  } satisfies CancelReportRequest;
+
+  try {
+    const data = await api.cancelReport(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **idempotencyKey** | `string` | Unique client-generated key. Reuse with a different payload returns &#x60;409&#x60;. | [Defaults to `undefined`] |
+| **reportId** | `string` |  | [Defaults to `undefined`] |
+
+### Return type
+
+[**Report**](Report.md)
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: `application/json`, `application/problem+json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | Current report state after the cancellation request. |  -  |
+| **401** | Authentication is absent or invalid. |  -  |
+| **404** | The resource does not exist or is not visible to the caller. |  -  |
+| **409** | The operation conflicts with current state or idempotency history. |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
 ## createReport

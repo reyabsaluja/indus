@@ -108,7 +108,7 @@ describe('application routing', () => {
     await renderPath('/crypto', true, resolver)
     expect(await screen.findByText('Bitcoin')).toBeVisible()
     expect(screen.queryByText('Coinbase')).not.toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('Live prices are unavailable in Phase 2')
+    expect(screen.getByRole('status')).toHaveTextContent('Feed stale')
     expect(resolver).toHaveBeenCalledWith('/v1/instruments/search?q=crypto&page_size=20')
   })
 
@@ -120,6 +120,46 @@ describe('application routing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add' }))
     await waitFor(() => expect(mutation).toHaveBeenCalled())
     expect(mutation).toHaveBeenCalledWith('/v1/favorites', 'POST', { symbol: 'TSLA', instrument_type: 'equity' }, expect.stringMatching(/^[0-9a-f-]{36}$/))
+  })
+
+  it('polls active reports until they reach a terminal state', async () => {
+    const id = '00000000-0000-4000-8000-000000000006'
+    const resolver = vi.fn(() => ({ next_cursor: null, items: [{ id, symbol: 'AAPL', title: 'Apple research',
+      status: resolver.mock.calls.length > 1 ? 'completed' : 'queued', created_at: now, updated_at: now }] }))
+
+    await renderPath('/reports', true, resolver)
+
+    expect(await screen.findByText('queued')).toBeVisible()
+    expect(await screen.findByText('completed', {}, { timeout: 3_500 })).toBeVisible()
+    expect(resolver).toHaveBeenCalledTimes(2)
+  }, 5_000)
+
+  it('requests cancellation for active reports and applies the returned terminal state', async () => {
+    const id = '00000000-0000-4000-8000-000000000007'
+    const report = { id, symbol: 'MSFT', title: 'Microsoft research', status: 'generating', created_at: now, updated_at: now }
+    const mutation = vi.fn(() => ({ ...report, status: 'cancelled' }))
+    await renderPath('/reports', true, () => ({ next_cursor: null, items: [report] }), mutation)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() => expect(mutation).toHaveBeenCalled())
+    expect(mutation).toHaveBeenCalledWith(`/v1/reports/${id}/cancel`, 'POST', undefined, expect.stringMatching(/^[0-9a-f-]{36}$/))
+    expect(await screen.findByText('cancelled')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
+  })
+
+  it('keeps an active report visible when cancellation fails without exposing provider details', async () => {
+    const id = '00000000-0000-4000-8000-000000000008'
+    const report = { id, symbol: 'NVDA', title: 'NVIDIA research', status: 'generating', created_at: now, updated_at: now }
+    const mutation = vi.fn(async () => { throw new Error('temporal.internal.example refused the request') })
+    await renderPath('/reports', true, () => ({ next_cursor: null, items: [report] }), mutation)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('The report cancellation could not be requested.')
+    expect(screen.queryByText(/temporal\.internal/)).not.toBeInTheDocument()
+    expect(screen.getByText('generating')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled()
   })
 
   it('deletes a favorite by its unambiguous resource identifier', async () => {

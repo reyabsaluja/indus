@@ -21,7 +21,7 @@ docker run --rm \
   --env REDIS_URL=redis://redis:6379/1 \
   --env RAILS_ENV=test \
   "$rails_image" \
-  -lc 'bundle check || bundle install; bin/rails db:prepare; bundle exec rspec; bin/rubocop; bin/brakeman --quiet --no-pager --exit-on-warn --exit-on-error; bin/bundler-audit check --update'
+  -lc 'set -eu; bundle check || bundle install; bin/rails db:prepare; bundle exec rspec; bin/rubocop; bin/brakeman --quiet --no-pager --exit-on-warn --exit-on-error; bin/bundler-audit check --update'
 
 docker build --tag indus-platform-api:phase2 apps/platform-api
 

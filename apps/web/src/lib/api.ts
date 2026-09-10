@@ -43,6 +43,8 @@ export const portfolioSchema = z.object({ id: z.string().uuid(), name: z.string(
 export const portfolioPageSchema = page(portfolioSchema)
 export const reportSchema = z.object({ id: z.string().uuid(), symbol: z.string(), portfolio_id: z.string().uuid().nullable().optional(), title: z.string(), status: z.enum(['queued', 'generating', 'completed', 'failed', 'cancelled']), failure_code: z.string().nullable().optional(), created_at: dateTime, updated_at: dateTime })
 export const reportPageSchema = page(reportSchema)
+export type Report = z.infer<typeof reportSchema>
+export type ReportPage = z.infer<typeof reportPageSchema>
 export const fundamentalsSchema = z.object({ symbol: z.string(), as_of: dateTime, source: z.string(), metrics: z.record(z.string(), z.union([z.number(), z.string(), z.null()])) })
 export const userSchema = z.object({ id: z.string().uuid(), email: z.string().email(), display_name: z.string(), created_at: dateTime, updated_at: dateTime })
 

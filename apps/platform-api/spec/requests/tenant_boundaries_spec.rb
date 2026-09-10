@@ -1,4 +1,5 @@
 require "rails_helper"
+require Rails.root.join("app/services/fundamentals_provider")
 
 RSpec.describe "tenant API boundaries", type: :request do
   let(:claims) { { "iss" => "https://example.supabase.co/auth/v1", "sub" => "current-user", "email" => "user@example.test" } }
@@ -52,7 +53,7 @@ RSpec.describe "tenant API boundaries", type: :request do
     end.to change(Report, :count).by(1).and change(OutboxEvent, :count).by(1)
     expect(response).to have_http_status(:accepted)
     expect(OutboxEvent.last.payload).to include("symbol" => "MSFT", "envelope" => include(
-      "event_id" => OutboxEvent.last.id, "schema_version" => 1, "event_type" => "report.requested",
+      "event_id" => OutboxEvent.last.id, "schema_version" => 1, "event_type" => "report.queued",
       "producer" => "platform-api", "idempotency_key" => headers.fetch("Idempotency-Key"),
       "tenant_id" => Report.last.user_id))
     expect(OutboxEvent.last.payload.dig("envelope", "correlation_id")).to be_present

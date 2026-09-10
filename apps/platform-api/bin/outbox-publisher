@@ -1,0 +1,15 @@
+#!/usr/bin/env ruby
+require_relative "../config/environment"
+
+producer = Events::KafkaProducer.from_env
+publisher = Events::OutboxPublisher.new(producer: producer)
+shutdown = false
+%w[INT TERM].each { |signal| Signal.trap(signal) { shutdown = true } }
+
+begin
+  until shutdown
+    sleep(publisher.publish_batch.zero? ? 1 : 0.05)
+  end
+ensure
+  producer&.close
+end

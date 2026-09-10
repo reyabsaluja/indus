@@ -1,0 +1,11 @@
+#!/usr/bin/env ruby
+require_relative "../config/environment"
+require "temporalio/worker"
+
+client = Temporalio::Client.connect(ENV.fetch("TEMPORAL_ADDRESS", "temporal:7233"),
+  ENV.fetch("TEMPORAL_NAMESPACE", "default"))
+worker = Temporalio::Worker.new(client: client, task_queue: Reports::TemporalClient::TASK_QUEUE,
+  workflows: [ Reports::ResearchWorkflow ], activities: [ Reports::StartReportActivity,
+    Reports::LoadReportEvidenceActivity, Reports::GenerateReportActivity, Reports::PersistReportActivity,
+    Reports::MarkReportFailedActivity, Reports::MarkReportCancelledActivity ], graceful_shutdown_period: 30)
+worker.run(shutdown_signals: %w[INT TERM])

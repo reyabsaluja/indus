@@ -544,6 +544,28 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+  /v1/reports/{report_id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/ReportId"
+    post:
+      tags: [Reports]
+      operationId: cancelReport
+      summary: Request cancellation of a queued or generating report.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Current report state after the cancellation request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /v1/explanations:
     post:
       tags: [Models]

@@ -1,0 +1,171 @@
+services:
+  platform-api:
+    environment: &platform-workflow-environment
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-indus-local-access-key}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-indus-local-secret-key}
+      AUTH_PROVIDER: ${AUTH_PROVIDER:-supabase}
+      DATABASE_URL: postgres://indus:indus-local-password@postgres:5432/indus_development
+      KAFKA_AUTH_MODE: plaintext
+      KAFKA_BROKERS: redpanda:9092
+      KAFKA_CLIENT_ID: indus-platform-api-local
+      OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      REPORT_ARTIFACT_BUCKET: indus-report-artifacts
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:3000/readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  temporal:
+    profiles: ["distributed"]
+    image: temporalio/auto-setup:1.29.7
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      DEFAULT_NAMESPACE: default
+      POSTGRES_PWD: indus-local-password
+      POSTGRES_SEEDS: postgres
+      POSTGRES_USER: indus
+    ports:
+      - "127.0.0.1:17233:7233"
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "127.0.0.1:7233"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  temporal-ui:
+    profiles: ["distributed"]
+    image: temporalio/ui:2.53.1
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://127.0.0.1:18080
+    ports:
+      - "127.0.0.1:18080:8080"
+    depends_on:
+      temporal:
+        condition: service_healthy
+
+  minio:
+    profiles: ["distributed"]
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-indus-local-secret-key}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-indus-local-access-key}
+    ports:
+      - "127.0.0.1:19000:9000"
+      - "127.0.0.1:19001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - report-artifacts:/data
+
+  minio-init:
+    profiles: ["distributed"]
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - >-
+        mc alias set local http://minio:9000
+        "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" &&
+        mc mb --ignore-existing local/indus-report-artifacts
+    environment:
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-indus-local-secret-key}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-indus-local-access-key}
+    depends_on:
+      minio:
+        condition: service_healthy
+
+  workflow-topic-init:
+    profiles: ["distributed"]
+    image: docker.redpanda.com/redpandadata/redpanda:v25.2.1
+    entrypoint: ["/bin/bash", "-ec"]
+    command:
+      - >-
+        until rpk cluster health --exit-when-healthy --brokers redpanda:9092; do sleep 2; done;
+        for topic in reports.lifecycle.v1 portfolios.activity.v1 audit.security.v1; do
+          rpk topic describe "$${topic}" --brokers redpanda:9092 >/dev/null 2>&1 ||
+          rpk topic create "$${topic}" --brokers redpanda:9092;
+        done
+
+  platform-migrate:
+    profiles: ["distributed"]
+    build:
+      context: ./apps/platform-api
+    command: ["./bin/rails", "db:prepare"]
+    environment:
+      DATABASE_URL: postgres://indus:indus-local-password@postgres:5432/indus_development
+      RAILS_ENV: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  platform-outbox:
+    profiles: ["distributed"]
+    build:
+      context: ./apps/platform-api
+    command: ["./bin/outbox-publisher"]
+    environment:
+      <<: *platform-workflow-environment
+      KAFKA_CLIENT_ID: indus-outbox-local
+      RAILS_ENV: development
+      REDIS_URL: redis://redis:6379/0
+    restart: unless-stopped
+    depends_on:
+      platform-migrate:
+        condition: service_completed_successfully
+      workflow-topic-init:
+        condition: service_completed_successfully
+
+  reports-consumer:
+    profiles: ["distributed"]
+    build:
+      context: ./apps/platform-api
+    command: ["./bin/reports-consumer"]
+    environment:
+      <<: *platform-workflow-environment
+      KAFKA_CLIENT_ID: indus-reports-consumer-local
+      RAILS_ENV: development
+      REDIS_URL: redis://redis:6379/0
+      REPORTS_KAFKA_CONSUMER_GROUP: indus-report-workflow-starter-local-v1
+    restart: unless-stopped
+    depends_on:
+      platform-migrate:
+        condition: service_completed_successfully
+      temporal:
+        condition: service_healthy
+      workflow-topic-init:
+        condition: service_completed_successfully
+
+  research-worker:
+    profiles: ["distributed"]
+    build:
+      context: ./apps/platform-api
+    command: ["./bin/research-worker"]
+    environment:
+      <<: *platform-workflow-environment
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      RAILS_ENV: development
+      REDIS_URL: redis://redis:6379/0
+    restart: unless-stopped
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+      platform-migrate:
+        condition: service_completed_successfully
+      temporal:
+        condition: service_healthy
+
+volumes:
+  report-artifacts:

@@ -24,9 +24,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_06_001000) do
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
     t.datetime "window_started_at", null: false
-    t.index ["user_id", "operation", "window_started_at"], name: "ai_usage_window_identity", unique: true
+    t.string "window_type", default: "hour", null: false
+    t.index ["user_id", "operation", "window_type", "window_started_at"], name: "ai_usage_window_identity", unique: true
     t.index ["user_id"], name: "index_ai_usage_windows_on_user_id"
     t.check_constraint "request_count >= 0 AND input_tokens >= 0 AND output_tokens >= 0", name: "ai_usage_nonnegative"
+    t.check_constraint "window_type::text = ANY (ARRAY['hour'::character varying, 'day'::character varying]::text[])", name: "ai_usage_window_type"
   end
 
   create_table "audit_events", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -38,6 +40,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_06_001000) do
     t.uuid "user_id"
     t.index ["user_id", "occurred_at"], name: "index_audit_events_on_user_id_and_occurred_at"
     t.index ["user_id"], name: "index_audit_events_on_user_id"
+  end
+
+  create_table "consumed_events", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "consumer", limit: 100, null: false
+    t.uuid "event_id", null: false
+    t.datetime "processed_at", null: false
+    t.index ["consumer", "event_id"], name: "index_consumed_events_on_consumer_and_event_id", unique: true
   end
 
   create_table "favorites", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -71,11 +80,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_06_001000) do
     t.string "aggregate_type", null: false
     t.integer "attempts", default: 0, null: false
     t.datetime "created_at", null: false
+    t.string "last_error", limit: 120
+    t.datetime "next_attempt_at"
     t.jsonb "payload", default: {}, null: false
     t.datetime "published_at"
     t.string "topic", null: false
     t.datetime "updated_at", null: false
     t.index ["created_at"], name: "outbox_unpublished", where: "(published_at IS NULL)"
+    t.check_constraint "attempts >= 0", name: "outbox_attempts_nonnegative"
   end
 
   create_table "portfolios", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -107,6 +119,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_06_001000) do
     t.check_constraint "quantity > 0::numeric", name: "positions_positive_quantity"
   end
 
+  create_table "report_activity_executions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "activity_key", limit: 100, null: false
+    t.integer "attempts", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.string "last_error", limit: 120
+    t.datetime "lease_expires_at"
+    t.uuid "report_id", null: false
+    t.jsonb "result", default: {}, null: false
+    t.string "status", default: "running", null: false
+    t.datetime "updated_at", null: false
+    t.index ["lease_expires_at"], name: "report_activity_running_leases", where: "((status)::text = 'running'::text)"
+    t.index ["report_id", "activity_key"], name: "report_activity_identity", unique: true
+    t.index ["report_id"], name: "index_report_activity_executions_on_report_id"
+    t.check_constraint "attempts >= 0", name: "report_activity_attempts_nonnegative"
+    t.check_constraint "status::text = ANY (ARRAY['running'::character varying, 'completed'::character varying, 'failed'::character varying]::text[])", name: "report_activity_status"
+  end
+
   create_table "report_sources", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.jsonb "evidence", default: {}, null: false
@@ -115,10 +144,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_06_001000) do
     t.uuid "report_id", null: false
     t.string "source_reference", null: false
     t.datetime "updated_at", null: false
+    t.index ["report_id", "kind", "source_reference"], name: "report_source_identity", unique: true
     t.index ["report_id"], name: "index_report_sources_on_report_id"
   end
 
   create_table "reports", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "artifact_key"
+    t.datetime "completed_at"
     t.text "content"
     t.datetime "created_at", null: false
     t.string "failure_code"
@@ -130,8 +162,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_06_001000) do
     t.string "title", null: false
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
+    t.string "workflow_id"
     t.index ["portfolio_id"], name: "index_reports_on_portfolio_id"
     t.index ["user_id"], name: "index_reports_on_user_id"
+    t.index ["workflow_id"], name: "index_reports_on_workflow_id", unique: true, where: "(workflow_id IS NOT NULL)"
     t.check_constraint "char_length(symbol::text) <= 20 AND symbol::text ~ '^[A-Z0-9]+([./-][A-Z0-9]+)?$'::text", name: "reports_strict_symbol"
     t.check_constraint "char_length(title::text) >= 1 AND char_length(title::text) <= 200", name: "reports_title_length"
     t.check_constraint "status::text = ANY (ARRAY['queued'::character varying::text, 'generating'::character varying::text, 'completed'::character varying::text, 'failed'::character varying::text, 'cancelled'::character varying::text])", name: "reports_status"
@@ -155,6 +189,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_06_001000) do
   add_foreign_key "idempotency_records", "users"
   add_foreign_key "portfolios", "users"
   add_foreign_key "positions", "portfolios"
+  add_foreign_key "report_activity_executions", "reports", on_delete: :cascade
   add_foreign_key "report_sources", "reports", on_delete: :cascade
   add_foreign_key "reports", "portfolios", column: ["portfolio_id", "user_id"], primary_key: ["id", "user_id"], name: "reports_portfolio_owner_fk"
   add_foreign_key "reports", "users"

@@ -17,7 +17,8 @@ class ModelGateway
   }.freeze
   TASKS = {
     "metric_explanations" => { prompt_version: "v2", evidence: %w[fundamentals] },
-    "financial_chat" => { prompt_version: "v2", evidence: %w[fundamentals portfolio] }
+    "financial_chat" => { prompt_version: "v2", evidence: %w[fundamentals portfolio] },
+    "research_report" => { prompt_version: "v1", evidence: %w[fundamentals portfolio] }
   }.freeze
 
   def self.default
@@ -66,8 +67,26 @@ class ModelGateway
       payload.keys.sort == %w[message sources] && message.is_a?(Hash) && message.keys.sort == %w[content role] &&
         message["role"] == "assistant" && message["content"].to_s.length.between?(1, 10_000) &&
         valid_sources?(payload["sources"], citations, required: citations.any?)
+    when "research_report"
+      valid_report_payload?(payload, input)
     end
     raise Error.new(:invalid_response, "model response does not match the task schema") unless valid
+  end
+
+  def valid_report_payload?(payload, input)
+    return false unless payload.keys.sort == %w[claims content summary]
+    return false unless payload["summary"].is_a?(String) && payload["summary"].length.between?(1, 10_000)
+    return false unless payload["content"].is_a?(String) && payload["content"].length.between?(1, 200_000)
+
+    allowed = input.fetch(:evidence).to_h { |source| [ source.fetch("source_id"), source.fetch("as_of") ] }
+    claims = payload["claims"]
+    claims.is_a?(Array) && claims.length.between?(1, 50) && claims.all? do |claim|
+      claim.is_a?(Hash) && claim.keys.sort == %w[as_of sources text] && claim["text"].is_a?(String) &&
+        claim["text"].length.between?(1, 5_000) && claim["sources"].is_a?(Array) &&
+        claim["sources"].length.between?(1, 10) && claim["sources"].uniq == claim["sources"] &&
+        claim["sources"].all? { |source_id| allowed.key?(source_id) } &&
+        claim["sources"].any? { |source_id| allowed.fetch(source_id) == claim["as_of"] }
+    end
   end
 
   def valid_sources?(sources, citations, required:)

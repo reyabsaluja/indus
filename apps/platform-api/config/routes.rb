@@ -9,6 +9,7 @@ Rails.application.routes.draw do
       resources :positions, only: %i[index create update destroy]
     end
     resources :reports, only: %i[index show create destroy]
+    post "reports/:id/cancel", to: "reports#cancel"
     get "market/summary", to: "market#summary"
     get "instruments/search", to: "instruments#search"
     get "fundamentals/:symbol", to: "fundamentals#show"

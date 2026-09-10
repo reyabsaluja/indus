@@ -22,12 +22,18 @@ module V1
       if attributes[:focus].present? && (!attributes[:focus].is_a?(String) || !attributes[:focus].length.between?(1, 1_000))
         raise ActionController::BadRequest, "focus must be between 1 and 1000 characters"
       end
+      AiUsageLimiter.new(user: Current.user, operation: "report").consume!
       report = Current.user.reports.new(symbol: attributes[:symbol], portfolio_id: attributes[:portfolio_id],
         title: "#{attributes[:symbol].to_s.upcase} research report")
       authorize report
       Report.transaction do
         report.save!
-        create_report_outbox_event(report, attributes[:focus])
+        event = OutboxEvent.new(id: SecureRandom.uuid, topic: "reports.lifecycle.v1", aggregate_type: "Report", aggregate_id: report.id)
+        event.payload = { envelope: Events::Envelope.build(event_id: event.id, event_type: "report.queued",
+          tenant_id: Current.user.id, correlation_id: request.request_id, idempotency_key: request.headers["Idempotency-Key"]),
+          report_id: report.id, user_id: Current.user.id, symbol: report.symbol, previous_status: nil,
+          status: report.status, workflow_id: "report-#{report.id}", failure_code: nil, focus: attributes[:focus] }
+        event.save!
       end
       response.set_header("Location", "/v1/reports/#{report.id}")
       render json: report_json(report), status: :accepted
@@ -40,16 +46,20 @@ module V1
       head :no_content
     end
 
-    private
-
-    def create_report_outbox_event(report, focus)
-      event_id = SecureRandom.uuid
-      occurred_at = Time.current
-      envelope = { event_id: event_id, schema_version: 1, event_type: "report.requested", producer: "platform-api",
-        occurred_at: occurred_at.iso8601, correlation_id: request.request_id, causation_id: request.request_id,
-        idempotency_key: request.headers["Idempotency-Key"], tenant_id: Current.user.id }
-      OutboxEvent.create!(id: event_id, topic: "report.requested", aggregate_type: "Report", aggregate_id: report.id,
-        payload: { envelope: envelope, report_id: report.id, user_id: Current.user.id, symbol: report.symbol, focus: focus })
+    def cancel
+      report = policy_scope(Report).find(params[:id])
+      authorize report, :update?
+      if %w[queued generating].include?(report.status)
+        Report.transaction do
+          report.lock!
+          previous_status = report.status
+          report.update!(status: "cancelled", failure_code: nil)
+          Reports::LifecycleEvent.emit!(report: report, previous_status: previous_status,
+            correlation_id: request.request_id, idempotency_key: request.headers["Idempotency-Key"])
+        end
+        Reports::TemporalClient.from_env.cancel_report(report.workflow_id) if report.workflow_id.present?
+      end
+      render json: report_json(report.reload)
     end
   end
 end

@@ -222,7 +222,7 @@ jobs:
             --volume "$PWD:/workspace" --workdir /workspace \
             --env DATABASE_URL --env REDIS_URL --env RAILS_ENV \
             indus-rails-toolchain:8.1.3.1 \
-            -lc 'bundle install; bin/rails db:prepare; bundle exec rspec; bin/rubocop; bin/brakeman --quiet --no-pager --exit-on-warn --exit-on-error; bin/bundler-audit check --update'
+            -lc 'set -eu; bundle install; bin/rails db:prepare; bundle exec rspec; bin/rubocop; bin/brakeman --quiet --no-pager --exit-on-warn --exit-on-error; bin/bundler-audit check --update'
 
       - name: Build production image
         run: docker build apps/platform-api
@@ -259,10 +259,60 @@ jobs:
       - name: Run browser, accessibility, and performance verification
         run: bun run test:e2e
 
+  market-data:
+    name: Rust market data
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17.10-alpine
+        env:
+          POSTGRES_DB: indus_market_test
+          POSTGRES_USER: indus
+          POSTGRES_PASSWORD: indus-local-password
+        options: >-
+          --health-cmd "pg_isready -U indus -d indus_market_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+        ports:
+          - 5432:5432
+    env:
+      TEST_DATABASE_URL: postgres://indus:indus-local-password@127.0.0.1:5432/indus_market_test
+      TEST_KAFKA_BROKERS: 127.0.0.1:19092
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install native build dependencies
+        run: sudo apt-get update && sudo apt-get install --yes cmake libcurl4-openssl-dev libssl-dev pkg-config
+
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.96.0 --profile minimal --component clippy,rustfmt
+
+      - name: Start disposable Kafka
+        run: |
+          docker run --detach --name indus-redpanda --publish 19092:19092 \
+            docker.redpanda.com/redpandadata/redpanda:v25.2.1 \
+            redpanda start --overprovisioned --smp=1 --memory=512M --reserve-memory=0M \
+            --node-id=0 --check=false \
+            --kafka-addr=external://0.0.0.0:19092 \
+            --advertise-kafka-addr=external://127.0.0.1:19092
+          timeout 60 bash -c 'until docker exec indus-redpanda rpk cluster health --exit-when-healthy; do sleep 2; done'
+          docker exec indus-redpanda rpk topic create market.bars.v1 market.quotes.v1
+
+      - name: Verify market data service
+        working-directory: services/market-data
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --locked --all-targets --all-features -- -D warnings
+          cargo test --locked --all-targets
+          cargo build --locked --release
+
   required:
     name: Required verification
     if: always()
-    needs: [core, database, integration, browser, authenticated, contracts, platform-api, replacement-web]
+    needs: [core, database, integration, browser, authenticated, contracts, platform-api, replacement-web, market-data]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
@@ -276,6 +326,7 @@ jobs:
           CONTRACTS_RESULT: ${{ needs.contracts.result }}
           PLATFORM_API_RESULT: ${{ needs.platform-api.result }}
           REPLACEMENT_WEB_RESULT: ${{ needs.replacement-web.result }}
+          MARKET_DATA_RESULT: ${{ needs.market-data.result }}
         run: |
           test "$CORE_RESULT" = "success"
           test "$DATABASE_RESULT" = "success"
@@ -285,3 +336,4 @@ jobs:
           test "$CONTRACTS_RESULT" = "success"
           test "$PLATFORM_API_RESULT" = "success"
           test "$REPLACEMENT_WEB_RESULT" = "success"
+          test "$MARKET_DATA_RESULT" = "success"
