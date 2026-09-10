@@ -1,0 +1,68 @@
+name: indus
+
+services:
+  postgres:
+    image: postgres:17.10-alpine
+    environment:
+      POSTGRES_DB: indus_development
+      POSTGRES_PASSWORD: indus-local-password
+      POSTGRES_USER: indus
+    ports:
+      - "127.0.0.1:15432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U indus -d indus_development"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:8.2.5-alpine
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    ports:
+      - "127.0.0.1:16379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - redis-data:/data
+
+  platform-api:
+    profiles: ["application"]
+    build:
+      context: ./apps/platform-api
+    environment:
+      DATABASE_URL: postgres://indus:indus-local-password@postgres:5432/indus_development
+      REDIS_URL: redis://redis:6379/0
+      RAILS_ENV: development
+      CORS_ORIGINS: http://127.0.0.1:14173
+      SUPABASE_JWT_ISSUER: ${SUPABASE_JWT_ISSUER:-}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-}
+    ports:
+      - "127.0.0.1:13000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    profiles: ["application"]
+    build:
+      context: ./apps/web
+      args:
+        VITE_API_URL: http://127.0.0.1:13000
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
+        VITE_PUBLIC_SUPABASE_KEY: ${VITE_SUPABASE_ANON_KEY:-}
+    ports:
+      - "127.0.0.1:14173:4173"
+    depends_on:
+      platform-api:
+        condition: service_started
+
+volumes:
+  postgres-data:
+  redis-data:

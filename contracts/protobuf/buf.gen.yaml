@@ -1,0 +1,11 @@
+version: v2
+clean: true
+plugins:
+  - remote: buf.build/protocolbuffers/ruby:v29.3
+    out: ../generated/protobuf/ruby
+  - remote: buf.build/bufbuild/es:v2.2.3
+    out: ../generated/protobuf/typescript
+    opt:
+      - target=ts
+inputs:
+  - directory: .

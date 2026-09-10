@@ -1,0 +1,4 @@
+{
+  "message": { "role": "assistant", "content": "Revenue increased, based on the cited filing." },
+  "sources": [{ "label": "Quarterly filing", "as_of": "2026-06-30T00:00:00Z" }]
+}

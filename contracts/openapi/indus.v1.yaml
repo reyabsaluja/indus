@@ -1,0 +1,1336 @@
+openapi: 3.1.0
+info:
+  title: Indus Platform API
+  version: 1.0.0
+  summary: Public product API for the Indus financial intelligence platform.
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: |
+    This contract is the compatibility boundary between Indus clients and the
+    platform API. All `/v1` endpoints require an OAuth 2.0 bearer token unless
+    explicitly documented otherwise. Clients must treat unknown response fields
+    and error codes as forward-compatible additions.
+servers:
+  - url: /
+    description: Same-origin platform API
+security:
+  - bearerAuth: []
+tags:
+  - name: Operations
+    description: Process health and traffic-readiness probes.
+  - name: Identity
+    description: Authenticated user profile operations.
+  - name: Favorites
+    description: User-owned instrument watchlist operations.
+  - name: Portfolios
+    description: User-owned portfolio and position operations.
+  - name: Market
+    description: Bounded market snapshots used by authenticated product views.
+  - name: Instruments
+    description: Bounded ticker and company discovery operations.
+  - name: Fundamentals
+    description: Bounded financial fundamentals snapshots.
+  - name: Reports
+    description: Asynchronous research-report lifecycle operations.
+  - name: Models
+    description: Quota-controlled model-assisted product operations.
+paths:
+  /healthz:
+    get:
+      tags: [Operations]
+      operationId: getHealth
+      summary: Check whether the process is alive.
+      security: []
+      responses:
+        "200":
+          description: The process is alive.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /readyz:
+    get:
+      tags: [Operations]
+      operationId: getReadiness
+      summary: Check whether required dependencies can serve traffic.
+      security: []
+      responses:
+        "200":
+          description: The service is ready.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Readiness"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /v1/me:
+    get:
+      tags: [Identity]
+      operationId: getCurrentUser
+      summary: Return the authenticated application profile.
+      responses:
+        "200":
+          description: The current user's profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    patch:
+      tags: [Identity]
+      operationId: updateCurrentUser
+      summary: Update the authenticated application profile.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserRequest"
+      responses:
+        "200":
+          description: The updated profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+  /v1/favorites:
+    get:
+      tags: [Favorites]
+      operationId: listFavorites
+      summary: List favorites owned by the authenticated user.
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: A page of favorites.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FavoritePage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Favorites]
+      operationId: createFavorite
+      summary: Add an instrument to the authenticated user's favorites.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFavoriteRequest"
+      responses:
+        "201":
+          description: The favorite was created.
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Favorite"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+  /v1/favorites/{favorite_id}:
+    delete:
+      tags: [Favorites]
+      operationId: deleteFavorite
+      summary: Remove an instrument from the authenticated user's favorites.
+      parameters:
+        - $ref: "#/components/parameters/FavoriteId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "204":
+          description: The favorite was removed or was already absent.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /v1/portfolios:
+    get:
+      tags: [Portfolios]
+      operationId: listPortfolios
+      summary: List portfolios owned by the authenticated user.
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: A page of portfolios.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Portfolios]
+      operationId: createPortfolio
+      summary: Create a portfolio for the authenticated user.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePortfolioRequest"
+      responses:
+        "201":
+          description: The portfolio was created.
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Portfolio"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+  /v1/portfolios/{portfolio_id}:
+    parameters:
+      - $ref: "#/components/parameters/PortfolioId"
+    get:
+      tags: [Portfolios]
+      operationId: getPortfolio
+      summary: Return one portfolio owned by the authenticated user.
+      responses:
+        "200":
+          description: The portfolio and its current positions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Portfolios]
+      operationId: updatePortfolio
+      summary: Update one owned portfolio.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePortfolioRequest"
+      responses:
+        "200":
+          description: The updated portfolio.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Portfolio"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+    delete:
+      tags: [Portfolios]
+      operationId: deletePortfolio
+      summary: Delete an owned portfolio and its positions.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "204":
+          description: The portfolio was deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /v1/portfolios/{portfolio_id}/positions:
+    parameters:
+      - $ref: "#/components/parameters/PortfolioId"
+    get:
+      tags: [Portfolios]
+      operationId: listPositions
+      summary: List positions in an owned portfolio.
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: A page of positions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PositionPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Portfolios]
+      operationId: createPosition
+      summary: Add an instrument position to an owned portfolio.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePositionRequest"
+      responses:
+        "201":
+          description: The position was created.
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Position"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+  /v1/portfolios/{portfolio_id}/positions/{position_id}:
+    parameters:
+      - $ref: "#/components/parameters/PortfolioId"
+      - $ref: "#/components/parameters/PositionId"
+    patch:
+      tags: [Portfolios]
+      operationId: updatePosition
+      summary: Update a position in an owned portfolio.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePositionRequest"
+      responses:
+        "200":
+          description: The updated position.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Position"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+    delete:
+      tags: [Portfolios]
+      operationId: deletePosition
+      summary: Remove a position from an owned portfolio.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "204":
+          description: The position was removed.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /v1/market/summary:
+    get:
+      tags: [Market]
+      operationId: getMarketSummary
+      summary: Return index quotes and the authenticated user's watchlist snapshot.
+      responses:
+        "200":
+          description: A bounded dashboard market snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+  /v1/instruments/search:
+    get:
+      tags: [Instruments]
+      operationId: searchInstruments
+      summary: Search instruments by ticker symbol or company name.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Case-insensitive ticker symbol or company-name query.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: A bounded page of matching instruments.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstrumentSearchPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+  /v1/fundamentals/{symbol}:
+    get:
+      tags: [Fundamentals]
+      operationId: getFundamentals
+      summary: Return a bounded fundamentals snapshot for an instrument.
+      parameters:
+        - $ref: "#/components/parameters/SymbolPath"
+      responses:
+        "200":
+          description: The latest available fundamentals snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fundamentals"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+  /v1/reports:
+    get:
+      tags: [Reports]
+      operationId: listReports
+      summary: List reports owned by the authenticated user.
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageSize"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/ReportStatus"
+      responses:
+        "200":
+          description: A page of reports.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Reports]
+      operationId: createReport
+      summary: Start generation of a research report.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReportRequest"
+      responses:
+        "202":
+          description: Report generation was accepted.
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/reports/{report_id}:
+    parameters:
+      - $ref: "#/components/parameters/ReportId"
+    get:
+      tags: [Reports]
+      operationId: getReport
+      summary: Return one report owned by the authenticated user.
+      responses:
+        "200":
+          description: Report metadata and content when available.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Reports]
+      operationId: deleteReport
+      summary: Delete one owned report.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "204":
+          description: The report was deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /v1/explanations:
+    post:
+      tags: [Models]
+      operationId: createExplanations
+      summary: Explain a bounded set of financial metrics.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateExplanationsRequest"
+      responses:
+        "200":
+          description: Metric explanations grounded in the supplied snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExplanationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+  /v1/chat:
+    post:
+      tags: [Models]
+      operationId: createChatCompletion
+      summary: Create a grounded financial-analysis chat response.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRequest"
+      responses:
+        "200":
+          description: A completed assistant response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: OAuth 2.0 access token issued by the configured identity provider.
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque cursor returned by the previous page.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 512
+    PageSize:
+      name: page_size
+      in: query
+      description: Maximum number of records to return.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 25
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Unique client-generated key. Reuse with a different payload returns `409`.
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 128
+        pattern: "^[A-Za-z0-9._:-]+$"
+    SymbolPath:
+      name: symbol
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Symbol"
+    PortfolioId:
+      name: portfolio_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    FavoriteId:
+      name: favorite_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PositionId:
+      name: position_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ReportId:
+      name: report_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  headers:
+    Location:
+      description: Canonical path of the created resource.
+      schema:
+        type: string
+    RetryAfter:
+      description: Seconds the client should wait before retrying.
+      schema:
+        type: integer
+        minimum: 1
+  responses:
+    BadRequest:
+      description: The request is malformed.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Unauthorized:
+      description: Authentication is absent or invalid.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Forbidden:
+      description: The caller lacks the product permission required by this operation.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    NotFound:
+      description: The resource does not exist or is not visible to the caller.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Conflict:
+      description: The operation conflicts with current state or idempotency history.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    UnprocessableEntity:
+      description: The request is syntactically valid but violates domain rules.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    TooManyRequests:
+      description: A request quota was exhausted.
+      headers:
+        Retry-After:
+          $ref: "#/components/headers/RetryAfter"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    BadGateway:
+      description: A required upstream provider failed or returned invalid data.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    ServiceUnavailable:
+      description: A required dependency is unavailable.
+      headers:
+        Retry-After:
+          $ref: "#/components/headers/RetryAfter"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+  schemas:
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: ok
+    Readiness:
+      type: object
+      additionalProperties: false
+      required: [status, checks]
+      properties:
+        status:
+          type: string
+          enum: [ready, not_ready]
+        checks:
+          type: object
+          additionalProperties:
+            type: string
+            enum: [up, down]
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, email, display_name, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    UpdateUserRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+    Symbol:
+      type: string
+      minLength: 1
+      maxLength: 20
+      pattern: "^[A-Z0-9]+(?:[./-][A-Z0-9]+)?$"
+      examples: [AAPL, BTC/USD]
+    InstrumentType:
+      type: string
+      enum: [equity, crypto]
+    InstrumentSearchResult:
+      type: object
+      additionalProperties: false
+      required: [symbol, name, instrument_type]
+      properties:
+        symbol:
+          $ref: "#/components/schemas/Symbol"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        instrument_type:
+          $ref: "#/components/schemas/InstrumentType"
+        exchange:
+          type: string
+          minLength: 1
+          maxLength: 50
+    InstrumentSearchPage:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: "#/components/schemas/PageMetadata"
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              maxItems: 100
+              items:
+                $ref: "#/components/schemas/InstrumentSearchResult"
+    Favorite:
+      type: object
+      additionalProperties: false
+      required: [id, symbol, instrument_type, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        symbol:
+          $ref: "#/components/schemas/Symbol"
+        instrument_type:
+          $ref: "#/components/schemas/InstrumentType"
+        created_at:
+          type: string
+          format: date-time
+    CreateFavoriteRequest:
+      type: object
+      additionalProperties: false
+      required: [symbol, instrument_type]
+      properties:
+        symbol:
+          $ref: "#/components/schemas/Symbol"
+        instrument_type:
+          $ref: "#/components/schemas/InstrumentType"
+    FavoritePage:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: "#/components/schemas/PageMetadata"
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Favorite"
+    Portfolio:
+      type: object
+      required: [id, name, base_currency, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        base_currency:
+          $ref: "#/components/schemas/CurrencyCode"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    PortfolioDetail:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: "#/components/schemas/Portfolio"
+        - type: object
+          required: [positions]
+          properties:
+            positions:
+              type: array
+              maxItems: 1000
+              items:
+                $ref: "#/components/schemas/Position"
+    CreatePortfolioRequest:
+      type: object
+      additionalProperties: false
+      required: [name, base_currency]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        base_currency:
+          $ref: "#/components/schemas/CurrencyCode"
+    UpdatePortfolioRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        base_currency:
+          $ref: "#/components/schemas/CurrencyCode"
+    PortfolioPage:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: "#/components/schemas/PageMetadata"
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Portfolio"
+    Position:
+      type: object
+      additionalProperties: false
+      required: [id, portfolio_id, symbol, instrument_type, quantity, average_cost, currency, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        portfolio_id:
+          type: string
+          format: uuid
+        symbol:
+          $ref: "#/components/schemas/Symbol"
+        instrument_type:
+          $ref: "#/components/schemas/InstrumentType"
+        quantity:
+          $ref: "#/components/schemas/PositiveDecimal"
+        average_cost:
+          $ref: "#/components/schemas/NonNegativeDecimal"
+        currency:
+          $ref: "#/components/schemas/CurrencyCode"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CreatePositionRequest:
+      type: object
+      additionalProperties: false
+      required: [symbol, instrument_type, quantity, average_cost, currency]
+      properties:
+        symbol:
+          $ref: "#/components/schemas/Symbol"
+        instrument_type:
+          $ref: "#/components/schemas/InstrumentType"
+        quantity:
+          $ref: "#/components/schemas/PositiveDecimal"
+        average_cost:
+          $ref: "#/components/schemas/NonNegativeDecimal"
+        currency:
+          $ref: "#/components/schemas/CurrencyCode"
+    UpdatePositionRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        quantity:
+          $ref: "#/components/schemas/PositiveDecimal"
+        average_cost:
+          $ref: "#/components/schemas/NonNegativeDecimal"
+    PositionPage:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: "#/components/schemas/PageMetadata"
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Position"
+    CurrencyCode:
+      type: string
+      pattern: "^[A-Z]{3}$"
+      examples: [USD, CAD]
+    MarketSummary:
+      type: object
+      additionalProperties: false
+      required: [indices, watchlist]
+      properties:
+        indices:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/MarketQuote"
+        watchlist:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/WatchlistQuote"
+    MarketQuote:
+      type: object
+      additionalProperties: false
+      required: [symbol, price, changePercent]
+      properties:
+        symbol:
+          $ref: "#/components/schemas/Symbol"
+        price:
+          type: number
+          minimum: 0
+        changePercent:
+          type: number
+          minimum: -100
+          maximum: 100000
+    WatchlistQuote:
+      type: object
+      additionalProperties: false
+      required: [symbol, name, price, changePercent]
+      properties:
+        symbol:
+          $ref: "#/components/schemas/Symbol"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        price:
+          type: number
+          minimum: 0
+        changePercent:
+          type: number
+          minimum: -100
+          maximum: 100000
+    PositiveDecimal:
+      type: string
+      pattern: "^(?=.{1,29}$)(?=.*[1-9])(?:0|[1-9][0-9]{0,17})(?:\\.[0-9]{1,10})?$"
+      description: Positive base-10 decimal with at most 18 integer and 10 fractional digits, encoded as a string.
+    NonNegativeDecimal:
+      type: string
+      pattern: "^(?:0|[1-9][0-9]{0,13})(?:\\.[0-9]{1,8})?$"
+      description: Non-negative base-10 decimal with at most 14 integer and 8 fractional digits, encoded as a string.
+    Fundamentals:
+      type: object
+      additionalProperties: false
+      required: [symbol, as_of, source, metrics]
+      properties:
+        symbol:
+          $ref: "#/components/schemas/Symbol"
+        as_of:
+          type: string
+          format: date-time
+        source:
+          type: string
+          minLength: 1
+          maxLength: 50
+        metrics:
+          type: object
+          maxProperties: 100
+          additionalProperties:
+            oneOf:
+              - type: number
+              - type: string
+              - type: "null"
+    ReportStatus:
+      type: string
+      enum: [queued, generating, completed, failed, cancelled]
+    Report:
+      type: object
+      required: [id, symbol, title, status, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        symbol:
+          $ref: "#/components/schemas/Symbol"
+        portfolio_id:
+          type: [string, "null"]
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        status:
+          $ref: "#/components/schemas/ReportStatus"
+        failure_code:
+          type: [string, "null"]
+          maxLength: 100
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ReportDetail:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: "#/components/schemas/Report"
+        - type: object
+          properties:
+            summary:
+              type: [string, "null"]
+              maxLength: 10000
+            content:
+              type: [string, "null"]
+              maxLength: 200000
+            sources:
+              type: array
+              maxItems: 100
+              items:
+                $ref: "#/components/schemas/SourceCitation"
+    CreateReportRequest:
+      type: object
+      additionalProperties: false
+      required: [symbol]
+      properties:
+        symbol:
+          $ref: "#/components/schemas/Symbol"
+        portfolio_id:
+          type: string
+          format: uuid
+        focus:
+          type: string
+          minLength: 1
+          maxLength: 1000
+    ReportPage:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: "#/components/schemas/PageMetadata"
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Report"
+    CreateExplanationsRequest:
+      type: object
+      additionalProperties: false
+      required: [symbol, metrics]
+      properties:
+        symbol:
+          $ref: "#/components/schemas/Symbol"
+        metrics:
+          type: array
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 80
+        as_of:
+          type: string
+          format: date-time
+    ExplanationResponse:
+      type: object
+      additionalProperties: false
+      required: [symbol, as_of, explanations, usage]
+      properties:
+        symbol:
+          $ref: "#/components/schemas/Symbol"
+        as_of:
+          type: string
+          format: date-time
+        explanations:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/MetricExplanation"
+        usage:
+          $ref: "#/components/schemas/ModelUsage"
+    MetricExplanation:
+      type: object
+      additionalProperties: false
+      required: [metric, explanation]
+      properties:
+        metric:
+          type: string
+          minLength: 1
+          maxLength: 80
+        explanation:
+          type: string
+          minLength: 1
+          maxLength: 5000
+        sources:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/SourceCitation"
+    ChatRequest:
+      type: object
+      additionalProperties: false
+      required: [messages]
+      properties:
+        conversation_id:
+          type: string
+          format: uuid
+        symbol:
+          $ref: "#/components/schemas/Symbol"
+        portfolio_id:
+          type: string
+          format: uuid
+        messages:
+          type: array
+          minItems: 1
+          maxItems: 8
+          description: Message content is additionally limited to 8,000 UTF-8 bytes in aggregate.
+          items:
+            $ref: "#/components/schemas/ChatMessage"
+    ChatMessage:
+      type: object
+      additionalProperties: false
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+          minLength: 1
+          maxLength: 1000
+    ChatResponse:
+      type: object
+      additionalProperties: false
+      required: [conversation_id, message, usage]
+      properties:
+        conversation_id:
+          type: string
+          format: uuid
+        message:
+          $ref: "#/components/schemas/ChatMessage"
+        sources:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/SourceCitation"
+        usage:
+          $ref: "#/components/schemas/ModelUsage"
+    SourceCitation:
+      type: object
+      additionalProperties: false
+      required: [label, as_of]
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 200
+        uri:
+          type: string
+          format: uri
+        as_of:
+          type: string
+          format: date-time
+    ModelUsage:
+      type: object
+      additionalProperties: false
+      required: [input_tokens, output_tokens]
+      properties:
+        input_tokens:
+          type: integer
+          minimum: 0
+        output_tokens:
+          type: integer
+          minimum: 0
+    PageMetadata:
+      type: object
+      required: [next_cursor]
+      properties:
+        next_cursor:
+          type: [string, "null"]
+          maxLength: 512
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, code, request_id]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+          maxLength: 2000
+        code:
+          type: string
+          pattern: "^[a-z][a-z0-9_]{1,63}$"
+        request_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        errors:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/FieldError"
+    FieldError:
+      type: object
+      additionalProperties: false
+      required: [code, pointer]
+      properties:
+        code:
+          type: string
+          pattern: "^[a-z][a-z0-9_]{1,63}$"
+        pointer:
+          type: string
+          description: JSON Pointer identifying the invalid field.
+          maxLength: 500
+        detail:
+          type: string
+          maxLength: 500

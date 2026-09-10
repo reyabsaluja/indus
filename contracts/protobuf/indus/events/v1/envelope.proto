@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package indus.events.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// EventEnvelope carries the metadata required for tracing, replay, and
+// duplicate-safe consumption. The Kafka record value contains the domain event;
+// these fields are copied to headers by producers where the client supports it.
+message EventEnvelope {
+  string event_id = 1;
+  uint32 schema_version = 2;
+  string event_type = 3;
+  string producer = 4;
+  google.protobuf.Timestamp occurred_at = 5;
+  string correlation_id = 6;
+  string causation_id = 7;
+  string idempotency_key = 8;
+  string tenant_id = 9;
+}

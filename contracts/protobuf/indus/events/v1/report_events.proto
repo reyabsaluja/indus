@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package indus.events.v1;
+
+import "google/protobuf/timestamp.proto";
+import "indus/events/v1/envelope.proto";
+
+// ReportLifecycleEvent is published to reports.lifecycle.v1. Consumers must
+// ignore duplicate event IDs and reject unsupported envelope schema versions.
+message ReportLifecycleEvent {
+  EventEnvelope envelope = 1;
+  string report_id = 2;
+  string user_id = 3;
+  string symbol = 4;
+  ReportStatus previous_status = 5;
+  ReportStatus status = 6;
+  string workflow_id = 7;
+  string failure_code = 8;
+  google.protobuf.Timestamp completed_at = 9;
+}
+
+enum ReportStatus {
+  REPORT_STATUS_UNSPECIFIED = 0;
+  REPORT_STATUS_QUEUED = 1;
+  REPORT_STATUS_GENERATING = 2;
+  REPORT_STATUS_COMPLETED = 3;
+  REPORT_STATUS_FAILED = 4;
+  REPORT_STATUS_CANCELLED = 5;
+}

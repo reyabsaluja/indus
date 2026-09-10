@@ -1,0 +1,13 @@
+/config/master.key
+/config/credentials/*.key
+/.bundle
+/coverage
+/log/*
+!/log/.keep
+/storage/*
+!/storage/.keep
+/tmp/*
+!/tmp/.keep
+!/tmp/pids
+/tmp/pids/*
+!/tmp/pids/.keep

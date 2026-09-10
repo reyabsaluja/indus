@@ -1,0 +1,9 @@
+{
+  "explanations": [
+    {
+      "metric": "revenue",
+      "explanation": "Revenue increased year over year.",
+      "sources": [{ "label": "Quarterly filing", "as_of": "2026-06-30T00:00:00Z" }]
+    }
+  ]
+}

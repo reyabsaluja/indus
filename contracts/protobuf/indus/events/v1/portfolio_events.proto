@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package indus.events.v1;
+
+import "indus/events/v1/envelope.proto";
+
+// PortfolioActivityEvent is published to portfolios.activity.v1 after the
+// owning transaction commits through the platform API outbox.
+message PortfolioActivityEvent {
+  EventEnvelope envelope = 1;
+  string portfolio_id = 2;
+  string user_id = 3;
+  PortfolioAction action = 4;
+  string position_id = 5;
+  string symbol = 6;
+  string quantity = 7;
+  string average_cost = 8;
+  string currency = 9;
+}
+
+enum PortfolioAction {
+  PORTFOLIO_ACTION_UNSPECIFIED = 0;
+  PORTFOLIO_ACTION_CREATED = 1;
+  PORTFOLIO_ACTION_UPDATED = 2;
+  PORTFOLIO_ACTION_DELETED = 3;
+  PORTFOLIO_ACTION_POSITION_ADDED = 4;
+  PORTFOLIO_ACTION_POSITION_UPDATED = 5;
+  PORTFOLIO_ACTION_POSITION_REMOVED = 6;
+}

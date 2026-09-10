@@ -1,0 +1,10 @@
+{
+  "candidates": [{
+    "content": { "parts": [{ "text": "Revenue increased 12% year over year." }] }
+  }],
+  "usageMetadata": {
+    "promptTokenCount": 10,
+    "candidatesTokenCount": 8,
+    "totalTokenCount": 18
+  }
+}

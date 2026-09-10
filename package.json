@@ -28,7 +28,8 @@
 		"test:authenticated": "bash scripts/test-authenticated.sh",
 		"test:performance": "bun run build && E2E_USE_PRODUCTION=true playwright test --grep @performance --project=chromium",
 		"test:performance:run": "E2E_USE_PRODUCTION=true playwright test --grep @performance --project=chromium",
-		"test:local": "bash scripts/verify-local.sh"
+		"test:local": "bash scripts/verify-local.sh",
+		"test:phase2": "bash scripts/verify-phase2.sh"
 	},
 	"dependencies": {
 		"@alpacahq/alpaca-trade-api": "4.0.1",

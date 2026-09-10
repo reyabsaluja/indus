@@ -159,10 +159,110 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  contracts:
+    name: Application contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Validate contracts, compatibility, and generated clients
+        env:
+          CONTRACT_BASE_REVISION: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+        run: |
+          contracts/scripts/validate.sh
+          contracts/scripts/check-breaking.sh "$CONTRACT_BASE_REVISION"
+          contracts/scripts/verify-generated.sh
+
+  platform-api:
+    name: Rails platform API
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17.10-alpine
+        env:
+          POSTGRES_DB: indus_test
+          POSTGRES_USER: indus
+          POSTGRES_PASSWORD: indus-local-password
+        options: >-
+          --health-cmd "pg_isready -U indus -d indus_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:8.2.5-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+        ports:
+          - 6379:6379
+    env:
+      DATABASE_URL: postgres://indus:indus-local-password@127.0.0.1:5432/indus_test
+      REDIS_URL: redis://127.0.0.1:6379/1
+      RAILS_ENV: test
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build Rails toolchain
+        run: docker build --tag indus-rails-toolchain:8.1.3.1 tooling/rails
+
+      - name: Verify Rails application
+        working-directory: apps/platform-api
+        run: |
+          docker run --rm --network host --entrypoint sh \
+            --volume "$PWD:/workspace" --workdir /workspace \
+            --env DATABASE_URL --env REDIS_URL --env RAILS_ENV \
+            indus-rails-toolchain:8.1.3.1 \
+            -lc 'bundle install; bin/rails db:prepare; bundle exec rspec; bin/rubocop; bin/brakeman --quiet --no-pager --exit-on-warn --exit-on-error; bin/bundler-audit check --update'
+
+      - name: Build production image
+        run: docker build apps/platform-api
+
+  replacement-web:
+    name: Replacement web
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.13
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run static and unit verification
+        run: |
+          bun run lint
+          bun run typecheck
+          bun run test
+          bun run build
+
+      - name: Install browser engines
+        run: bunx playwright install --with-deps chromium firefox webkit
+
+      - name: Run browser, accessibility, and performance verification
+        run: bun run test:e2e
+
   required:
     name: Required verification
     if: always()
-    needs: [core, database, integration, browser, authenticated]
+    needs: [core, database, integration, browser, authenticated, contracts, platform-api, replacement-web]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
@@ -173,9 +273,15 @@ jobs:
           INTEGRATION_RESULT: ${{ needs.integration.result }}
           BROWSER_RESULT: ${{ needs.browser.result }}
           AUTHENTICATED_RESULT: ${{ needs.authenticated.result }}
+          CONTRACTS_RESULT: ${{ needs.contracts.result }}
+          PLATFORM_API_RESULT: ${{ needs.platform-api.result }}
+          REPLACEMENT_WEB_RESULT: ${{ needs.replacement-web.result }}
         run: |
           test "$CORE_RESULT" = "success"
           test "$DATABASE_RESULT" = "success"
           test "$INTEGRATION_RESULT" = "success"
           test "$BROWSER_RESULT" = "success"
           test "$AUTHENTICATED_RESULT" = "success"
+          test "$CONTRACTS_RESULT" = "success"
+          test "$PLATFORM_API_RESULT" = "success"
+          test "$REPLACEMENT_WEB_RESULT" = "success"

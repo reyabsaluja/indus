@@ -52,7 +52,7 @@
 		"useIgnoreFile": true
 	},
 	"files": {
-		"includes": ["**/*.ts", "**/*.tsx", "**/*.js"]
+		"includes": ["**/*.ts", "**/*.tsx", "**/*.js", "!apps/web", "!services", "!contracts/generated"]
 	},
 	"assist": {
 		"actions": {

@@ -1,0 +1,12 @@
+{
+  "quoteResponse": {
+    "result": [{
+      "symbol": "AAPL",
+      "shortName": "Apple Inc.",
+      "regularMarketPrice": 218.27,
+      "regularMarketChangePercent": 1.42,
+      "marketCap": 3290000000000,
+      "trailingPE": 33.1
+    }]
+  }
+}

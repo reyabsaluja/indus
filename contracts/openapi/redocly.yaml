@@ -1,0 +1,6 @@
+extends:
+  - recommended
+rules:
+  # Kubernetes-style probes intentionally expose only success and readiness
+  # failure states; malformed client input is not part of their contract.
+  operation-4xx-response: off
