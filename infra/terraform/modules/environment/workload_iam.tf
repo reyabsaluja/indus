@@ -8,6 +8,7 @@ locals {
     market_data       = "indus/market-data"
     database_migrator = "indus/database-migrator"
     web_publisher     = "indus/web-publisher"
+    legacy_next       = "indus/legacy-next"
     otel_collector    = "observability/otel-collector"
     load_balancer     = "kube-system/aws-load-balancer-controller"
   }
@@ -63,6 +64,25 @@ resource "aws_iam_role" "workload" {
   assume_role_policy   = data.aws_iam_policy_document.workload_assume[each.key].json
   max_session_duration = 3600
   tags                 = merge(local.common_tags, { ServiceAccount = each.value })
+}
+
+data "aws_iam_policy_document" "legacy_next" {
+  statement {
+    sid       = "ReadOwnRuntimeSecret"
+    actions   = ["secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue"]
+    resources = [aws_secretsmanager_secret.workload["legacy_next"].arn]
+  }
+  statement {
+    sid       = "DecryptRuntimeSecret"
+    actions   = ["kms:Decrypt", "kms:DescribeKey"]
+    resources = [aws_kms_key.data.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "legacy_next" {
+  name   = "runtime"
+  role   = aws_iam_role.workload["legacy_next"].id
+  policy = data.aws_iam_policy_document.legacy_next.json
 }
 
 data "aws_iam_policy_document" "platform_api" {

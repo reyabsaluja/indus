@@ -124,6 +124,17 @@ variable "replacement_traffic_weight" {
   }
 }
 
+variable "edge_runtime" {
+  type        = string
+  description = "Public workload selected at the edge. legacy-next serves the current application; replacement is reserved for the final cutover."
+  default     = "legacy-next"
+
+  validation {
+    condition     = contains(["legacy-next", "replacement"], var.edge_runtime)
+    error_message = "edge_runtime must be legacy-next or replacement."
+  }
+}
+
 variable "cognito_callback_urls" {
   type        = list(string)
   description = "Exact OAuth callback URLs."

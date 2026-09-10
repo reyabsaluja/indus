@@ -223,6 +223,28 @@ resource "aws_lb_target_group" "api" {
   tags = local.common_tags
 }
 
+resource "aws_lb_target_group" "legacy_next" {
+  name        = substr("${local.name}-legacy-next", 0, 32)
+  port        = 3000
+  protocol    = "HTTP"
+  target_type = "ip"
+  vpc_id      = aws_vpc.this.id
+
+  deregistration_delay = 30
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    interval            = 15
+    timeout             = 5
+    path                = "/api/health?mode=ready"
+    matcher             = "200"
+  }
+
+  tags = local.common_tags
+}
+
 resource "aws_lb_target_group" "stream" {
   name             = substr("${local.name}-stream", 0, 32)
   port             = 8081
@@ -254,12 +276,8 @@ resource "aws_lb_listener" "https" {
   certificate_arn   = aws_acm_certificate_validation.origin.certificate_arn
 
   default_action {
-    type = "fixed-response"
-    fixed_response {
-      content_type = "application/json"
-      message_body = jsonencode({ error = { code = "not_found", message = "Route not found" } })
-      status_code  = "404"
-    }
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.legacy_next.arn
   }
 }
 
@@ -268,7 +286,7 @@ resource "aws_lb_listener_rule" "api" {
   priority     = 10
   action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.api.arn
+    target_group_arn = var.edge_runtime == "legacy-next" ? aws_lb_target_group.legacy_next.arn : aws_lb_target_group.api.arn
   }
   condition {
     path_pattern {
@@ -282,7 +300,7 @@ resource "aws_lb_listener_rule" "stream" {
   priority     = 20
   action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.stream.arn
+    target_group_arn = var.edge_runtime == "legacy-next" ? aws_lb_target_group.legacy_next.arn : aws_lb_target_group.stream.arn
   }
   condition {
     path_pattern {
@@ -419,7 +437,7 @@ resource "aws_cloudfront_distribution" "this" {
   }
 
   default_cache_behavior {
-    target_origin_id       = "web"
+    target_origin_id       = var.edge_runtime == "legacy-next" ? "api" : "web"
     viewer_protocol_policy = "redirect-to-https"
     allowed_methods        = ["GET", "HEAD", "OPTIONS"]
     cached_methods         = ["GET", "HEAD", "OPTIONS"]

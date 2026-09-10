@@ -1,0 +1,6 @@
+apiVersion: v2
+name: indus-legacy-next
+description: Restricted AWS workload for the current Next.js application during the Vercel exit.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

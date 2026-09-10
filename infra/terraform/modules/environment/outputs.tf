@@ -11,10 +11,11 @@ output "cluster" {
 
 output "edge" {
   value = {
-    application_url            = "https://${var.domain_name}"
-    cloudfront_distribution_id = aws_cloudfront_distribution.this.id
-    api_target_group_arn       = aws_lb_target_group.api.arn
-    stream_target_group_arn    = aws_lb_target_group.stream.arn
+    application_url              = "https://${var.domain_name}"
+    cloudfront_distribution_id   = aws_cloudfront_distribution.this.id
+    api_target_group_arn         = aws_lb_target_group.api.arn
+    legacy_next_target_group_arn = aws_lb_target_group.legacy_next.arn
+    stream_target_group_arn      = aws_lb_target_group.stream.arn
   }
 }
 

@@ -31,6 +31,7 @@ locals {
     platform_api       = "${local.name}/platform-api"
     market_data        = "${local.name}/market-data"
     research_worker    = "${local.name}/research-worker"
+    legacy_next        = "${local.name}/legacy-next"
   }
 
   rds_proxy_secret_keys = toset([
