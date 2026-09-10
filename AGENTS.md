@@ -140,8 +140,11 @@ Current application tables include `favorites`, `reports`, `metric_explanations`
 - `lib/realtime/alpaca-stream.ts` — market stream normalization and SSE helpers.
 - `lib/ai/geminiClient.ts` — Gemini request and stream client.
 - `lib/security/ai-access.ts` — authentication and quota enforcement for model-backed routes.
+- `lib/reliability/async.ts` and `lib/reliability/cache.ts` — bounded provider retries, deadlines, request deduplication, and stale-on-error caching.
+- `lib/server/market-history.ts` and `lib/server/stock-data.ts` — market provider fallback and partial-response boundaries.
 - `lib/server/report-stock-data.ts` — server-side report evidence retrieval.
 - `lib/schemas/api.ts` — shared API and environment schemas.
 - `lib/env.ts` and `lib/env-legacy.ts` — current and transitional environment handling.
 - `next.config.ts` — required server package and warning configuration.
+- `docs/RELIABILITY.md` — deployed runtime failure behavior and operational diagnostics.
 - `docs/REVAMP_PLAN.md` — future Rails, Rust, Gemini, and AWS migration plan.

@@ -1,18 +1,19 @@
 "use client";
 
 import {
+	Bitcoin,
+	ChartNoAxesCombined,
 	ChevronUp,
-	FileBarChart,
-	FolderKanban,
+	FileText,
 	HelpCircle,
 	LogOut,
-	MoreHorizontal,
 	Search,
 	Settings,
 	User,
 } from "lucide-react";
-import Image from "next/image";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { BrandMark } from "@/components/BrandMark";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -36,19 +37,13 @@ import {
 import { useAuth } from "@/lib/stores/auth-store";
 
 const mainItems = [
-	{ title: "Dashboard", url: "/dashboard", icon: FileBarChart },
+	{ title: "Dashboard", url: "/dashboard", icon: ChartNoAxesCombined },
 	{ title: "Search", url: "/search", icon: Search },
 ];
 
 const docItems = [
-	{ title: "Reports", url: "/reports", icon: FileBarChart },
-	{
-		title: "Assistant",
-		url: "/word",
-		icon: FolderKanban,
-		badge: "Coming soon",
-	},
-	{ title: "More", url: "/more", icon: MoreHorizontal },
+	{ title: "Crypto", url: "/crypto", icon: Bitcoin },
+	{ title: "Reports", url: "/reports", icon: FileText },
 ];
 
 const footerItems = [
@@ -61,20 +56,14 @@ export function AppSidebar() {
 	const { user, signOut } = useAuth();
 
 	return (
-		<Sidebar variant="sidebar" collapsible="icon">
+		<Sidebar variant="sidebar" collapsible="icon" className="border-r border-sidebar-border/80">
 			<SidebarContent>
 				{/* Main Section */}
 				<SidebarGroup>
-					<SidebarGroupLabel className="text-[19px] font-semibold tracking-tight text-white mt-2 mb-3 -ml-1">
-						<div className="flex items-center">
-							<Image
-								src="/logo.png"
-								alt="Indus Logo"
-								width={32}
-								height={32}
-								className="rounded-full"
-							/>
-							<span>Indus</span>
+					<SidebarGroupLabel className="mb-5 mt-3 h-9 text-lg font-bold tracking-[-0.04em] text-sidebar-foreground">
+						<div className="flex items-center gap-2.5">
+							<BrandMark />
+							<span className="group-data-[collapsible=icon]:hidden">Indus</span>
 						</div>
 					</SidebarGroupLabel>
 					<SidebarGroupContent>
@@ -84,18 +73,18 @@ export function AppSidebar() {
 								return (
 									<SidebarMenuItem key={item.title}>
 										<SidebarMenuButton asChild>
-											<a
+											<Link
 												href={item.url}
 												aria-label={item.title}
-												className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${
+												className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
 													isActive
-														? "bg-muted text-foreground"
-														: "hover:bg-muted text-muted-foreground"
+														? "bg-sidebar-accent text-sidebar-accent-foreground"
+														: "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
 												}`}
 											>
 												<item.icon className="w-5 h-5" />
 												<span className="group-data-[collapsible=icon]:hidden">{item.title}</span>
-											</a>
+											</Link>
 										</SidebarMenuButton>
 									</SidebarMenuItem>
 								);
@@ -106,40 +95,23 @@ export function AppSidebar() {
 
 				{/* Documents Section */}
 				<SidebarGroup>
-					<SidebarGroupLabel className="text-sm text-muted-foreground mt-6 mb-2 px-3">
-						Documents
+					<SidebarGroupLabel className="mb-2 mt-5 px-3 font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
+						Research
 					</SidebarGroupLabel>
 					<SidebarGroupContent>
 						<SidebarMenu>
 							{docItems.map((item) => (
 								<SidebarMenuItem key={item.title}>
-									{item.badge === "Coming soon" ? (
-										<div className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground/60 cursor-not-allowed">
-											<item.icon className="w-5 h-5 opacity-50" />
-											<span className="group-data-[collapsible=icon]:hidden opacity-50">
-												{item.title}
-											</span>
-											<span className="ml-auto rounded-md bg-muted/50 px-2 py-0.5 text-xs text-muted-foreground/60 group-data-[collapsible=icon]:hidden">
-												{item.badge}
-											</span>
-										</div>
-									) : (
-										<SidebarMenuButton asChild>
-											<a
-												href={item.url}
-												aria-label={item.title}
-												className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted text-muted-foreground"
-											>
-												<item.icon className="w-5 h-5" />
-												<span className="group-data-[collapsible=icon]:hidden">{item.title}</span>
-												{item.badge && (
-													<span className="ml-auto rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
-														{item.badge}
-													</span>
-												)}
-											</a>
-										</SidebarMenuButton>
-									)}
+									<SidebarMenuButton asChild isActive={pathname === item.url}>
+										<Link
+											href={item.url}
+											aria-label={item.title}
+											className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+										>
+											<item.icon className="w-5 h-5" />
+											<span className="group-data-[collapsible=icon]:hidden">{item.title}</span>
+										</Link>
+									</SidebarMenuButton>
 								</SidebarMenuItem>
 							))}
 						</SidebarMenu>
@@ -153,14 +125,14 @@ export function AppSidebar() {
 					{footerItems.map((item) => (
 						<SidebarMenuItem key={item.title}>
 							<SidebarMenuButton asChild>
-								<a
+								<Link
 									href={item.url}
 									aria-label={item.title}
-									className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted text-muted-foreground"
+									className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
 								>
 									<item.icon className="w-5 h-5" />
 									<span className="group-data-[collapsible=icon]:hidden">{item.title}</span>
-								</a>
+								</Link>
 							</SidebarMenuButton>
 						</SidebarMenuItem>
 					))}
@@ -190,13 +162,11 @@ export function AppSidebar() {
 					<DropdownMenuContent align="end" className="w-56">
 						<DropdownMenuLabel>My Account</DropdownMenuLabel>
 						<DropdownMenuSeparator />
-						<DropdownMenuItem>
-							<User className="mr-2 h-4 w-4" />
-							<span>Profile</span>
-						</DropdownMenuItem>
-						<DropdownMenuItem>
-							<Settings className="mr-2 h-4 w-4" />
-							<span>Settings</span>
+						<DropdownMenuItem asChild>
+							<a href="/settings#profile">
+								<User className="mr-2 h-4 w-4" />
+								<span>Account</span>
+							</a>
 						</DropdownMenuItem>
 						<DropdownMenuSeparator />
 						<DropdownMenuItem onClick={signOut} className="text-red-600 focus:text-red-600">
@@ -213,6 +183,7 @@ export function AppSidebar() {
 							variant="ghost"
 							size="icon"
 							className="mt-4 h-8 w-8 rounded-full bg-muted group-data-[collapsible=icon]:flex hidden mx-auto"
+							aria-label="Open account menu"
 						>
 							{user?.email?.[0]?.toUpperCase() || "U"}
 						</Button>
@@ -220,13 +191,11 @@ export function AppSidebar() {
 					<DropdownMenuContent align="center" className="w-56">
 						<DropdownMenuLabel>My Account</DropdownMenuLabel>
 						<DropdownMenuSeparator />
-						<DropdownMenuItem>
-							<User className="mr-2 h-4 w-4" />
-							<span>Profile</span>
-						</DropdownMenuItem>
-						<DropdownMenuItem>
-							<Settings className="mr-2 h-4 w-4" />
-							<span>Settings</span>
+						<DropdownMenuItem asChild>
+							<a href="/settings#profile">
+								<User className="mr-2 h-4 w-4" />
+								<span>Account</span>
+							</a>
 						</DropdownMenuItem>
 						<DropdownMenuSeparator />
 						<DropdownMenuItem onClick={signOut} className="text-red-600 focus:text-red-600">

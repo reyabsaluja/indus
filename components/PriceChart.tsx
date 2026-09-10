@@ -3,22 +3,47 @@
 import type { CandlestickData, Time } from "lightweight-charts";
 import {
 	CandlestickSeries,
+	ColorType,
+	CrosshairMode,
 	createChart,
+	HistogramSeries,
 	type IChartApi,
 	type ISeriesApi,
+	type LogicalRange,
 } from "lightweight-charts";
+import { AlertCircle, Radio, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+	CHART_RANGES,
+	type ChartRangeValue,
+	filterRangeData,
+	getChartRange,
+	getPreviousHistoryEndTimestamp,
+	getRangeStartTimestamp,
+	prependOlderBars,
+	shiftLogicalRange,
+} from "@/lib/charts/ranges";
+import { getRealtimeStatus, type RealtimeStatus } from "@/lib/realtime/stream-status";
+import type { PageChartData } from "@/lib/types";
 
 type AssetType = "stock" | "crypto";
-type BarData = CandlestickData<Time> & { volume?: number };
-type RealtimeStatus = "connecting" | "connected" | "reconnecting" | "disabled";
+type BarData = CandlestickData<Time> & { time: number; volume?: number };
 
 interface HistoricalDataResponse {
 	data: BarData[];
 	isEmpty: boolean;
-	earliestTimestamp: number | null;
 	totalBars: number;
 	error?: string;
+}
+
+interface ChartSnapshot {
+	open: number;
+	high: number;
+	low: number;
+	close: number;
+	change: number;
+	changePercent: number;
 }
 
 export interface PriceChartProps {
@@ -27,23 +52,11 @@ export interface PriceChartProps {
 	height?: number;
 	className?: string;
 	showControls?: boolean;
+	onDataChange?: (data: PageChartData | undefined) => void;
 }
 
-const timeframes = [
-	{ value: "1Min", label: "1 Min" },
-	{ value: "5Min", label: "5 Min" },
-	{ value: "15Min", label: "15 Min" },
-	{ value: "1Hour", label: "1 Hour" },
-	{ value: "1Day", label: "1 Day" },
-	{ value: "1Week", label: "1 Week" },
-	{ value: "1Month", label: "1 Month" },
-];
-
 function isBarData(value: unknown): value is BarData {
-	if (!value || typeof value !== "object") {
-		return false;
-	}
-
+	if (!value || typeof value !== "object") return false;
 	const bar = value as Record<string, unknown>;
 	return ["time", "open", "high", "low", "close"].every(
 		(key) => typeof bar[key] === "number" && Number.isFinite(bar[key]),
@@ -51,17 +64,13 @@ function isBarData(value: unknown): value is BarData {
 }
 
 function parseHistoricalResponse(value: unknown): HistoricalDataResponse | null {
-	if (!value || typeof value !== "object") {
-		return null;
-	}
-
+	if (!value || typeof value !== "object") return null;
 	const response = value as Record<string, unknown>;
 	if (
 		!Array.isArray(response.data) ||
 		!response.data.every(isBarData) ||
 		typeof response.isEmpty !== "boolean" ||
-		typeof response.totalBars !== "number" ||
-		(response.earliestTimestamp !== null && typeof response.earliestTimestamp !== "number")
+		typeof response.totalBars !== "number"
 	) {
 		return null;
 	}
@@ -69,7 +78,6 @@ function parseHistoricalResponse(value: unknown): HistoricalDataResponse | null 
 	return {
 		data: response.data,
 		isEmpty: response.isEmpty,
-		earliestTimestamp: response.earliestTimestamp,
 		totalBars: response.totalBars,
 		error: typeof response.error === "string" ? response.error : undefined,
 	};
@@ -77,51 +85,104 @@ function parseHistoricalResponse(value: unknown): HistoricalDataResponse | null 
 
 function buildHistoricalUrl(
 	symbol: string,
-	timeframe: string,
+	rangeValue: ChartRangeValue,
 	type: AssetType,
 	end?: number,
 ): string {
-	const params = new URLSearchParams({ symbol, timeframe });
-
-	if (type === "crypto") {
-		params.set("type", "crypto");
-	}
-	if (end) {
-		params.set("end", String(end));
-	}
-
+	const range = getChartRange(rangeValue);
+	const params = new URLSearchParams({
+		symbol,
+		timeframe: range.timeframe,
+		limit: "5000",
+	});
+	if (end === undefined) params.set("start", String(getRangeStartTimestamp(rangeValue)));
+	else params.set("end", String(end));
+	if (type === "crypto") params.set("type", "crypto");
 	return `/api/alpaca?${params.toString()}`;
 }
 
+function snapshotFromBar(bar: BarData, firstClose: number): ChartSnapshot {
+	const change = bar.close - firstClose;
+	return {
+		open: bar.open,
+		high: bar.high,
+		low: bar.low,
+		close: bar.close,
+		change,
+		changePercent: firstClose === 0 ? 0 : (change / firstClose) * 100,
+	};
+}
+
+function formatPrice(value: number) {
+	return new Intl.NumberFormat("en-CA", {
+		minimumFractionDigits: value >= 100 ? 2 : 3,
+		maximumFractionDigits: value >= 100 ? 2 : 4,
+	}).format(value);
+}
+
+function getPalette() {
+	const dark = document.documentElement.classList.contains("dark");
+	return dark
+		? {
+				text: "#aab8ae",
+				grid: "rgba(208, 225, 213, 0.07)",
+				border: "rgba(208, 225, 213, 0.16)",
+				crosshair: "rgba(208, 225, 213, 0.42)",
+				up: "#b7ef49",
+				down: "#ff756b",
+				volumeUp: "rgba(183, 239, 73, 0.22)",
+				volumeDown: "rgba(255, 117, 107, 0.18)",
+			}
+		: {
+				text: "#52655a",
+				grid: "rgba(33, 74, 52, 0.08)",
+				border: "rgba(33, 74, 52, 0.18)",
+				crosshair: "rgba(33, 74, 52, 0.4)",
+				up: "#288451",
+				down: "#d54c43",
+				volumeUp: "rgba(40, 132, 81, 0.2)",
+				volumeDown: "rgba(213, 76, 67, 0.16)",
+			};
+}
+
 export default function PriceChart({
-	symbol: initialSymbol,
+	symbol,
 	type,
-	height = 500,
+	height = 540,
 	className = "",
 	showControls = true,
+	onDataChange,
 }: PriceChartProps) {
 	const chartContainerRef = useRef<HTMLDivElement>(null);
 	const chartRef = useRef<IChartApi | null>(null);
 	const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+	const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
 	const eventSourceRef = useRef<EventSource | null>(null);
 	const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const requestIdRef = useRef(0);
+	const hasUserNavigatedHistoryRef = useRef(false);
+	const historicalDataRef = useRef<BarData[]>([]);
+	const earliestLoadedTimestampRef = useRef<number | null>(null);
+	const isLoadingOlderRef = useRef(false);
+	const hasReachedHistoryLimitRef = useRef(false);
+	const selectedRangeRef = useRef<ChartRangeValue>("1D");
+	const symbolRef = useRef(symbol);
+	const snapshotBaselineRef = useRef<number | null>(null);
+	const latestSnapshotRef = useRef<ChartSnapshot | null>(null);
+	const onDataChangeRef = useRef(onDataChange);
+	onDataChangeRef.current = onDataChange;
 
-	const [selectedSymbol, setSelectedSymbol] = useState(initialSymbol);
-	const [selectedTimeframe, setSelectedTimeframe] = useState("1Min");
+	const [selectedRange, setSelectedRange] = useState<ChartRangeValue>("1D");
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>("connecting");
 	const [showReconnecting, setShowReconnecting] = useState(false);
-	const [isLoadingMoreData, setIsLoadingMoreData] = useState(false);
-	const [hasReachedDataLimit, setHasReachedDataLimit] = useState(false);
-	const [dataLimitMessage, setDataLimitMessage] = useState<string | null>(null);
-
-	const isLoadingMoreDataRef = useRef(false);
-	const earliestLoadedTimestampRef = useRef<number | null>(null);
-	const selectedSymbolRef = useRef(selectedSymbol);
-	const selectedTimeframeRef = useRef(selectedTimeframe);
-	const historicalDataRef = useRef<BarData[]>([]);
-	const hasReachedDataLimitRef = useRef(false);
+	const [latestSnapshot, setLatestSnapshot] = useState<ChartSnapshot | null>(null);
+	const [hoverSnapshot, setHoverSnapshot] = useState<ChartSnapshot | null>(null);
+	const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+	const [historyLimitReached, setHistoryLimitReached] = useState(false);
+	selectedRangeRef.current = selectedRange;
+	symbolRef.current = symbol;
 
 	const clearReconnectTimer = useCallback(() => {
 		if (reconnectTimerRef.current) {
@@ -130,360 +191,546 @@ export default function PriceChart({
 		}
 	}, []);
 
-	const resetLoadedData = useCallback(() => {
-		historicalDataRef.current = [];
-		earliestLoadedTimestampRef.current = null;
-		hasReachedDataLimitRef.current = false;
-		setHasReachedDataLimit(false);
-		setDataLimitMessage(null);
-
-		if (candlestickSeriesRef.current) {
-			candlestickSeriesRef.current.setData([]);
-		}
+	const applySeriesData = useCallback((data: BarData[]) => {
+		const palette = getPalette();
+		candlestickSeriesRef.current?.setData(data);
+		volumeSeriesRef.current?.setData(
+			data.map((bar) => ({
+				time: bar.time as Time,
+				value: bar.volume ?? 0,
+				color: bar.close >= bar.open ? palette.volumeUp : palette.volumeDown,
+			})),
+		);
 	}, []);
 
-	const loadHistoricalData = useCallback(
-		async (symbol: string, timeframe: string) => {
-			setError(null);
+	const loadHistoricalData = useCallback(async () => {
+		const requestId = ++requestIdRef.current;
+		hasUserNavigatedHistoryRef.current = false;
+		setIsLoading(true);
+		setError(null);
+		earliestLoadedTimestampRef.current = null;
+		snapshotBaselineRef.current = null;
+		hasReachedHistoryLimitRef.current = false;
+		setHistoryLimitReached(false);
+		isLoadingOlderRef.current = false;
+		setIsLoadingOlder(false);
+		onDataChangeRef.current?.(undefined);
 
-			try {
-				const response = await fetch(buildHistoricalUrl(symbol, timeframe, type));
-				const result = parseHistoricalResponse(await response.json());
+		try {
+			const response = await fetch(buildHistoricalUrl(symbol, selectedRange, type));
+			const payload: unknown = await response.json().catch(() => null);
+			const result = parseHistoricalResponse(payload);
 
-				if (response.ok && result && !result.isEmpty) {
-					historicalDataRef.current = result.data;
-					earliestLoadedTimestampRef.current = result.earliestTimestamp;
-					candlestickSeriesRef.current?.setData(result.data);
-				} else {
-					setError(result?.error ?? "Failed to load historical data");
-				}
-			} catch {
-				setError("Internal server error");
+			if (requestId !== requestIdRef.current) return;
+			if (!response.ok || !result || result.isEmpty) {
+				setError(result?.error ?? "No market history is available for this range.");
+				historicalDataRef.current = [];
+				applySeriesData([]);
+				latestSnapshotRef.current = null;
+				setLatestSnapshot(null);
+				setHoverSnapshot(null);
+				return;
 			}
-		},
-		[type],
-	);
 
-	const loadMoreHistoricalData = useCallback(async () => {
-		if (!earliestLoadedTimestampRef.current || isLoadingMoreDataRef.current) {
+			const rangeData = filterRangeData(result.data, selectedRange);
+			historicalDataRef.current = rangeData;
+			earliestLoadedTimestampRef.current = rangeData[0]?.time ?? null;
+			applySeriesData(rangeData);
+			chartRef.current?.timeScale().fitContent();
+
+			const first = rangeData[0];
+			const latest = rangeData.at(-1);
+			if (first && latest) {
+				snapshotBaselineRef.current = first.close;
+				const snapshot = snapshotFromBar(latest, first.close);
+				latestSnapshotRef.current = snapshot;
+				setLatestSnapshot(snapshot);
+				setHoverSnapshot(snapshot);
+				onDataChangeRef.current?.({
+					range: selectedRange,
+					interval: getChartRange(selectedRange).timeframe,
+					points: rangeData.slice(-100).map((bar) => ({
+						t: bar.time,
+						o: bar.open,
+						h: bar.high,
+						l: bar.low,
+						c: bar.close,
+						v: bar.volume ?? 0,
+					})),
+					latestPrice: snapshot.close,
+					rangeChangePct: snapshot.changePercent,
+				});
+			}
+		} catch {
+			if (requestId === requestIdRef.current) {
+				setError("Market history is temporarily unavailable. Try again in a moment.");
+			}
+		} finally {
+			if (requestId === requestIdRef.current) {
+				setIsLoading(false);
+			}
+		}
+	}, [applySeriesData, selectedRange, symbol, type]);
+
+	const loadOlderHistory = useCallback(async () => {
+		const earliestTimestamp = earliestLoadedTimestampRef.current;
+		const requestId = requestIdRef.current;
+		if (
+			earliestTimestamp === null ||
+			isLoadingOlderRef.current ||
+			hasReachedHistoryLimitRef.current
+		) {
 			return;
 		}
 
-		setIsLoadingMoreData(true);
-		isLoadingMoreDataRef.current = true;
-
+		isLoadingOlderRef.current = true;
+		hasUserNavigatedHistoryRef.current = false;
+		setIsLoadingOlder(true);
 		try {
 			const response = await fetch(
 				buildHistoricalUrl(
-					selectedSymbolRef.current,
-					selectedTimeframeRef.current,
+					symbolRef.current,
+					selectedRangeRef.current,
 					type,
-					earliestLoadedTimestampRef.current,
+					getPreviousHistoryEndTimestamp(earliestTimestamp),
 				),
 			);
-			const result = parseHistoricalResponse(await response.json());
-
-			if (response.ok && result && !result.isEmpty) {
-				const firstLoadedBar = historicalDataRef.current[0];
-				const filteredNewData = firstLoadedBar
-					? result.data.filter((bar: BarData) => bar.time < firstLoadedBar.time)
-					: result.data;
-				const combinedData = [...filteredNewData, ...historicalDataRef.current];
-
-				historicalDataRef.current = combinedData;
-				earliestLoadedTimestampRef.current = result.earliestTimestamp;
-				candlestickSeriesRef.current?.setData(combinedData);
-			} else {
-				hasReachedDataLimitRef.current = true;
-				setHasReachedDataLimit(true);
-
-				if (earliestLoadedTimestampRef.current) {
-					const earliestDate = new Date(earliestLoadedTimestampRef.current * 1000);
-					const yearsBack = Math.round(
-						(Date.now() - earliestDate.getTime()) / (365 * 24 * 60 * 60 * 1000),
-					);
-					setDataLimitMessage(
-						`Reached data limit: ${earliestDate.toLocaleDateString()} (${yearsBack} years ago)`,
-					);
-				}
+			const payload: unknown = await response.json().catch(() => null);
+			const result = parseHistoricalResponse(payload);
+			if (requestId !== requestIdRef.current) return;
+			if (!response.ok || !result) return;
+			if (result.isEmpty) {
+				hasReachedHistoryLimitRef.current = true;
+				setHistoryLimitReached(true);
+				return;
 			}
+
+			const current = historicalDataRef.current;
+			const combined = prependOlderBars(current, result.data);
+			const prependedCount = combined.length - current.length;
+			if (prependedCount === 0) {
+				hasReachedHistoryLimitRef.current = true;
+				setHistoryLimitReached(true);
+				return;
+			}
+
+			const currentVisibleRange = chartRef.current?.timeScale().getVisibleLogicalRange() ?? null;
+			historicalDataRef.current = combined;
+			earliestLoadedTimestampRef.current = combined[0]?.time ?? earliestTimestamp;
+			applySeriesData(combined);
+			const restoredRange = shiftLogicalRange(currentVisibleRange, prependedCount);
+			if (restoredRange) chartRef.current?.timeScale().setVisibleLogicalRange(restoredRange);
 		} catch {
-			setDataLimitMessage("Unable to load additional historical data");
+			// Keep the current chart usable; another left pan can retry the history request.
 		} finally {
-			setIsLoadingMoreData(false);
-			isLoadingMoreDataRef.current = false;
+			if (requestId === requestIdRef.current) {
+				isLoadingOlderRef.current = false;
+				setIsLoadingOlder(false);
+			}
 		}
-	}, [type]);
+	}, [applySeriesData, type]);
 
 	useEffect(() => {
-		if (!chartContainerRef.current) {
-			return;
-		}
-
+		if (!chartContainerRef.current) return;
+		const palette = getPalette();
+		const monoFont =
+			getComputedStyle(document.body).getPropertyValue("--font-geist-mono").trim() || "monospace";
 		const chart = createChart(chartContainerRef.current, {
 			width: chartContainerRef.current.clientWidth,
-			height,
+			height: chartContainerRef.current.clientHeight,
 			layout: {
-				background: { color: "transparent" },
-				textColor: "#e5e7eb",
+				background: { type: ColorType.Solid, color: "transparent" },
+				textColor: palette.text,
+				fontFamily: monoFont,
+				fontSize: 11,
 			},
 			grid: {
-				vertLines: { color: "#374151" },
-				horzLines: { color: "#374151" },
+				vertLines: { color: palette.grid },
+				horzLines: { color: palette.grid },
 			},
 			crosshair: {
-				mode: 1,
+				mode: CrosshairMode.Normal,
 				vertLine: {
-					color: "#6b7280",
+					color: palette.crosshair,
 					width: 1,
 					style: 2,
+					labelBackgroundColor: palette.text,
 				},
 				horzLine: {
-					color: "#6b7280",
+					color: palette.crosshair,
 					width: 1,
 					style: 2,
+					labelBackgroundColor: palette.text,
 				},
 			},
 			rightPriceScale: {
-				borderColor: "#4b5563",
-				textColor: "#e5e7eb",
+				borderColor: palette.border,
+				scaleMargins: { top: 0.08, bottom: 0.24 },
 			},
 			timeScale: {
-				borderColor: "#4b5563",
+				borderColor: palette.border,
 				timeVisible: true,
 				secondsVisible: false,
-				rightOffset: 12,
-				barSpacing: 6,
+				rightOffset: 5,
+				barSpacing: 8,
 				minBarSpacing: 0.5,
-				maxBarSpacing: 50,
 			},
+			handleScroll: {
+				mouseWheel: true,
+				pressedMouseMove: true,
+				horzTouchDrag: true,
+				vertTouchDrag: false,
+			},
+			handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
 		});
 
 		const candlestickSeries = chart.addSeries(CandlestickSeries, {
-			upColor: "#26a69a",
-			downColor: "#ef5350",
+			upColor: palette.up,
+			downColor: palette.down,
 			borderVisible: false,
-			wickUpColor: "#1a7a6b",
-			wickDownColor: "#c43e3a",
+			wickUpColor: palette.up,
+			wickDownColor: palette.down,
+			priceLineVisible: true,
+			lastValueVisible: true,
+		});
+		const volumeSeries = chart.addSeries(HistogramSeries, {
+			priceFormat: { type: "volume" },
+			priceScaleId: "volume",
+			lastValueVisible: false,
 			priceLineVisible: false,
 		});
+		chart.priceScale("volume").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
 
 		chartRef.current = chart;
 		candlestickSeriesRef.current = candlestickSeries;
+		volumeSeriesRef.current = volumeSeries;
 
-		let rangeChangeTimeout: ReturnType<typeof setTimeout> | null = null;
-		chart.timeScale().subscribeVisibleLogicalRangeChange((logicalRange) => {
-			if (rangeChangeTimeout) {
-				clearTimeout(rangeChangeTimeout);
+		chart.subscribeCrosshairMove((param) => {
+			const value = param.seriesData.get(candlestickSeries);
+			if (isBarData(value)) {
+				const firstClose = snapshotBaselineRef.current ?? value.close;
+				setHoverSnapshot(snapshotFromBar(value, firstClose));
+			} else {
+				setHoverSnapshot(latestSnapshotRef.current);
 			}
-
-			rangeChangeTimeout = setTimeout(() => {
-				if (
-					logicalRange &&
-					earliestLoadedTimestampRef.current &&
-					!isLoadingMoreDataRef.current &&
-					!hasReachedDataLimitRef.current &&
-					logicalRange.from !== null &&
-					logicalRange.from <= 3 &&
-					historicalDataRef.current.length > 50
-				) {
-					void loadMoreHistoricalData();
-				}
-			}, 500);
 		});
 
-		const handleResize = () => {
-			if (chartContainerRef.current && chartRef.current) {
-				chartRef.current.applyOptions({
-					width: chartContainerRef.current.clientWidth,
-				});
-			}
+		let historyTimer: ReturnType<typeof setTimeout> | null = null;
+		const markUserNavigation = () => {
+			hasUserNavigatedHistoryRef.current = true;
 		};
+		const chartContainer = chartContainerRef.current;
+		chartContainer.addEventListener("pointerdown", markUserNavigation, { capture: true });
+		chartContainer.addEventListener("touchstart", markUserNavigation, {
+			capture: true,
+			passive: true,
+		});
+		chartContainer.addEventListener("wheel", markUserNavigation, {
+			capture: true,
+			passive: true,
+		});
+		const handleVisibleRangeChange = (range: LogicalRange | null) => {
+			if (historyTimer) clearTimeout(historyTimer);
+			if (!hasUserNavigatedHistoryRef.current) return;
+			const bars = range ? candlestickSeries.barsInLogicalRange(range) : null;
+			if (!bars || bars.barsBefore > 10 || historicalDataRef.current.length < 2) return;
+			historyTimer = setTimeout(() => void loadOlderHistory(), 250);
+		};
+		chart.timeScale().subscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
 
-		window.addEventListener("resize", handleResize);
-		setIsLoading(false);
+		const resizeObserver = new ResizeObserver(([entry]) => {
+			if (!entry) return;
+			chart.applyOptions({ width: entry.contentRect.width, height: entry.contentRect.height });
+		});
+		resizeObserver.observe(chartContainerRef.current);
+
+		const themeObserver = new MutationObserver(() => {
+			const next = getPalette();
+			chart.applyOptions({
+				layout: { textColor: next.text },
+				grid: { vertLines: { color: next.grid }, horzLines: { color: next.grid } },
+				rightPriceScale: { borderColor: next.border },
+				timeScale: { borderColor: next.border },
+			});
+			candlestickSeries.applyOptions({
+				upColor: next.up,
+				downColor: next.down,
+				wickUpColor: next.up,
+				wickDownColor: next.down,
+			});
+			applySeriesData(historicalDataRef.current);
+		});
+		themeObserver.observe(document.documentElement, {
+			attributes: true,
+			attributeFilter: ["class"],
+		});
 
 		return () => {
-			if (rangeChangeTimeout) {
-				clearTimeout(rangeChangeTimeout);
-			}
-			window.removeEventListener("resize", handleResize);
+			if (historyTimer) clearTimeout(historyTimer);
+			chartContainer.removeEventListener("pointerdown", markUserNavigation, { capture: true });
+			chartContainer.removeEventListener("touchstart", markUserNavigation, { capture: true });
+			chartContainer.removeEventListener("wheel", markUserNavigation, { capture: true });
+			chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
+			resizeObserver.disconnect();
+			themeObserver.disconnect();
 			chart.remove();
 			chartRef.current = null;
 			candlestickSeriesRef.current = null;
+			volumeSeriesRef.current = null;
 		};
-	}, [height, loadMoreHistoricalData]);
+	}, [applySeriesData, loadOlderHistory]);
 
 	useEffect(() => {
-		selectedSymbolRef.current = selectedSymbol;
-	}, [selectedSymbol]);
+		void loadHistoricalData();
+	}, [loadHistoricalData]);
 
 	useEffect(() => {
-		selectedTimeframeRef.current = selectedTimeframe;
-	}, [selectedTimeframe]);
+		if (selectedRange !== "1D") {
+			setRealtimeStatus("historical");
+			setShowReconnecting(false);
+			return;
+		}
 
-	useEffect(() => {
-		resetLoadedData();
-		void loadHistoricalData(selectedSymbol, selectedTimeframe);
-	}, [loadHistoricalData, resetLoadedData, selectedSymbol, selectedTimeframe]);
-
-	useEffect(() => {
-		setSelectedSymbol(initialSymbol);
-	}, [initialSymbol]);
-
-	useEffect(() => {
-		const streamUrl = `/api/stream/${encodeURIComponent(selectedSymbol)}`;
-		const eventSource = new EventSource(streamUrl);
+		const eventSource = new EventSource(`/api/stream/${encodeURIComponent(symbol)}`);
 		eventSourceRef.current = eventSource;
-
 		setRealtimeStatus("connecting");
 		setShowReconnecting(false);
 		clearReconnectTimer();
 
-		const handleOpen = () => {
-			clearReconnectTimer();
-			setRealtimeStatus("connected");
+		eventSource.onopen = () => {
+			setRealtimeStatus(getRealtimeStatus("transport-open"));
 			setShowReconnecting(false);
 		};
-
+		eventSource.onerror = () => {
+			if (eventSource.readyState === EventSource.CLOSED) return;
+			setRealtimeStatus(getRealtimeStatus("transport-error"));
+			if (!reconnectTimerRef.current) {
+				reconnectTimerRef.current = setTimeout(() => setShowReconnecting(true), 2500);
+			}
+		};
+		const handleReady = () => {
+			clearReconnectTimer();
+			setRealtimeStatus(getRealtimeStatus("upstream-ready"));
+			setShowReconnecting(false);
+		};
 		const handleBar = (event: MessageEvent<string>) => {
 			try {
 				const data: unknown = JSON.parse(event.data);
-				if (
-					isBarData(data) &&
-					candlestickSeriesRef.current &&
-					selectedTimeframeRef.current === "1Min"
-				) {
-					candlestickSeriesRef.current.update(data);
-				}
+				if (!isBarData(data)) return;
+				candlestickSeriesRef.current?.update(data);
+				const palette = getPalette();
+				volumeSeriesRef.current?.update({
+					time: data.time as Time,
+					value: data.volume ?? 0,
+					color: data.close >= data.open ? palette.volumeUp : palette.volumeDown,
+				});
+				const existing = historicalDataRef.current;
+				const last = existing.at(-1);
+				historicalDataRef.current =
+					last?.time === data.time ? [...existing.slice(0, -1), data] : [...existing, data];
+				const firstClose = snapshotBaselineRef.current ?? data.close;
+				const snapshot = snapshotFromBar(data, firstClose);
+				latestSnapshotRef.current = snapshot;
+				setLatestSnapshot(snapshot);
+				setHoverSnapshot(snapshot);
+				onDataChangeRef.current?.({
+					range: selectedRange,
+					interval: getChartRange(selectedRange).timeframe,
+					points: historicalDataRef.current.slice(-100).map((bar) => ({
+						t: bar.time,
+						o: bar.open,
+						h: bar.high,
+						l: bar.low,
+						c: bar.close,
+						v: bar.volume ?? 0,
+					})),
+					latestPrice: snapshot.close,
+					rangeChangePct: snapshot.changePercent,
+				});
 			} catch {
 				return;
 			}
 		};
-
 		const handleStreamError = () => {
-			setRealtimeStatus("disabled");
+			setRealtimeStatus(getRealtimeStatus("provider-error"));
 			setShowReconnecting(false);
 			clearReconnectTimer();
 			eventSource.close();
 		};
-
-		const handleError = () => {
-			if (eventSource.readyState === EventSource.CLOSED) {
-				return;
-			}
-
-			setRealtimeStatus("reconnecting");
-			if (!reconnectTimerRef.current) {
-				reconnectTimerRef.current = setTimeout(() => {
-					setShowReconnecting(true);
-				}, 3000);
-			}
-		};
-
-		eventSource.onopen = handleOpen;
-		eventSource.onerror = handleError;
+		eventSource.addEventListener("ready", handleReady);
 		eventSource.addEventListener("bar", handleBar as EventListener);
 		eventSource.addEventListener("stream-error", handleStreamError as EventListener);
 
 		return () => {
 			clearReconnectTimer();
+			eventSource.removeEventListener("ready", handleReady);
 			eventSource.removeEventListener("bar", handleBar as EventListener);
 			eventSource.removeEventListener("stream-error", handleStreamError as EventListener);
 			eventSource.close();
-			if (eventSourceRef.current === eventSource) {
-				eventSourceRef.current = null;
-			}
+			if (eventSourceRef.current === eventSource) eventSourceRef.current = null;
 		};
-	}, [clearReconnectTimer, selectedSymbol]);
+	}, [clearReconnectTimer, selectedRange, symbol]);
+
+	const snapshot = hoverSnapshot ?? latestSnapshot;
+	const positive = (snapshot?.change ?? 0) >= 0;
+	const statusLabel =
+		realtimeStatus === "connected"
+			? "Live"
+			: realtimeStatus === "historical"
+				? "Historical"
+				: realtimeStatus === "reconnecting"
+					? "Reconnecting"
+					: "Connecting";
 
 	return (
-		<div className={`bg-card rounded-lg border border-border ${className}`}>
-			{showControls && (
-				<div className="p-4 border-b border-border">
-					<div className="flex flex-wrap items-center justify-between gap-3">
-						<h3 className="text-lg font-semibold">Price Chart</h3>
-						<div className="flex flex-wrap items-center gap-1 bg-muted rounded-lg p-1">
-							{timeframes.map((timeframe) => (
+		<section
+			className={`overflow-hidden rounded-[1.35rem] border border-border/70 bg-card shadow-sm ${className}`}
+			aria-label={`${symbol} price chart`}
+		>
+			<div className="border-b border-border/70 px-4 py-4 sm:px-5">
+				<div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+					<div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-3">
+						<div>
+							<div className="flex items-center gap-2">
+								<h2 className="font-mono text-sm font-bold tracking-[0.12em]">{symbol}</h2>
+								<span className="inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+									<span
+										className={`size-1.5 rounded-full ${realtimeStatus === "connected" ? "bg-primary" : "bg-muted-foreground/60"}`}
+									/>
+									{statusLabel}
+								</span>
+							</div>
+							{snapshot && (
+								<div className="mt-1 flex items-baseline gap-2">
+									<span className="font-mono text-2xl font-semibold tracking-[-0.04em]">
+										{formatPrice(snapshot.close)}
+									</span>
+									<span
+										className={`font-mono text-xs font-medium ${positive ? "text-primary" : "text-destructive"}`}
+									>
+										{positive ? "+" : ""}
+										{formatPrice(snapshot.change)} ({positive ? "+" : ""}
+										{snapshot.changePercent.toFixed(2)}%)
+									</span>
+								</div>
+							)}
+						</div>
+
+						{snapshot && (
+							<dl className="hidden items-center gap-4 text-xs text-muted-foreground sm:flex">
+								{[
+									["O", snapshot.open],
+									["H", snapshot.high],
+									["L", snapshot.low],
+									["C", snapshot.close],
+								].map(([label, value]) => (
+									<div key={label} className="flex gap-1.5">
+										<dt>{label}</dt>
+										<dd className="font-mono text-foreground">{formatPrice(Number(value))}</dd>
+									</div>
+								))}
+							</dl>
+						)}
+					</div>
+
+					{showControls && (
+						<div
+							className="flex w-full items-center gap-1 overflow-x-auto rounded-full border border-border bg-background/65 p-1 xl:w-auto"
+							role="group"
+							aria-label="Chart range"
+						>
+							{CHART_RANGES.map((range) => (
 								<button
-									key={timeframe.value}
+									key={range.value}
 									type="button"
-									onClick={() => setSelectedTimeframe(timeframe.value)}
-									className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-										selectedTimeframe === timeframe.value
-											? "bg-primary text-primary-foreground shadow-sm"
-											: "text-muted-foreground hover:text-foreground hover:bg-background"
+									onClick={() => setSelectedRange(range.value)}
+									aria-pressed={selectedRange === range.value}
+									className={`min-w-11 rounded-full px-3 py-1.5 font-mono text-[10px] font-semibold transition-colors ${
+										selectedRange === range.value
+											? "bg-foreground text-background shadow-sm"
+											: "text-muted-foreground hover:text-foreground"
 									}`}
 								>
-									{timeframe.label}
+									{range.label}
 								</button>
 							))}
 						</div>
-					</div>
+					)}
 				</div>
-			)}
+			</div>
 
-			{error && (
-				<div className="mx-4 mt-4 p-4 bg-destructive/10 border border-destructive/20 rounded-md">
-					<p className="text-destructive font-semibold">Failed to load historical data.</p>
-					<p className="text-destructive">Error: {error}</p>
-				</div>
-			)}
+			<div className="relative bg-background/25 p-2 sm:p-3">
+				<div
+					ref={chartContainerRef}
+					className="w-full overflow-hidden rounded-xl"
+					style={{ height: `clamp(340px, 52vw, ${height}px)` }}
+					role="img"
+					aria-label={
+						snapshot
+							? `${symbol} ${selectedRange} chart. Latest price ${formatPrice(snapshot.close)}, change ${snapshot.changePercent.toFixed(2)} percent.`
+							: `${symbol} ${selectedRange} price chart`
+					}
+				/>
 
-			<div className="relative p-4">
 				{isLoading && (
-					<div className="absolute inset-0 bg-background/90 flex items-center justify-center z-10 rounded-lg">
-						<div className="flex items-center space-x-2">
-							<div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
-							<span className="text-muted-foreground">Initializing chart...</span>
+					<div className="absolute inset-2 z-10 flex items-center justify-center rounded-xl bg-card/90 backdrop-blur-sm sm:inset-3">
+						<div className="text-center">
+							<RefreshCw className="mx-auto size-5 animate-spin text-primary" />
+							<p className="mt-3 text-xs text-muted-foreground">
+								Loading {selectedRange} market history…
+							</p>
+						</div>
+					</div>
+				)}
+
+				{error && !isLoading && (
+					<div className="absolute inset-2 z-10 flex items-center justify-center rounded-xl bg-card/95 p-6 backdrop-blur-sm sm:inset-3">
+						<div className="max-w-sm text-center">
+							<span className="mx-auto flex size-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+								<AlertCircle className="size-5" />
+							</span>
+							<h3 className="mt-4 text-sm font-semibold">Chart unavailable</h3>
+							<p className="mt-2 text-xs leading-5 text-muted-foreground">{error}</p>
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => void loadHistoricalData()}
+								className="mt-4 rounded-full"
+							>
+								<RefreshCw className="size-3.5" />
+								Try again
+							</Button>
 						</div>
 					</div>
 				)}
 
 				{showReconnecting && realtimeStatus === "reconnecting" && (
-					<div className="absolute top-8 left-1/2 z-20 -translate-x-1/2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-blue-300 shadow-lg">
-						<div className="flex items-center space-x-2">
-							<div className="h-4 w-4 animate-spin rounded-full border-b-2 border-blue-300" />
-							<span className="text-sm">Reconnecting live data...</span>
+					<div className="absolute left-1/2 top-7 z-20 -translate-x-1/2 rounded-full border border-border bg-card/95 px-3 py-1.5 shadow-lg backdrop-blur">
+						<div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+							<Radio className="size-3 animate-pulse text-primary" />
+							Reconnecting live feed
 						</div>
 					</div>
 				)}
 
-				{hasReachedDataLimit && dataLimitMessage && (
-					<div className="absolute top-8 left-8 z-20 bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 px-4 py-2 rounded-lg shadow-lg max-w-xs">
-						<div className="flex items-center space-x-2">
-							<div className="flex-shrink-0">
-								<svg className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-									<path
-										fillRule="evenodd"
-										d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-										clipRule="evenodd"
-									/>
-								</svg>
-							</div>
-							<div className="text-sm">
-								<p className="font-medium">Data Limit Reached</p>
-								<p className="text-xs">{dataLimitMessage}</p>
-							</div>
+				{isLoadingOlder && (
+					<div className="absolute left-5 top-5 z-20 rounded-full border border-border bg-card/95 px-3 py-1.5 shadow-lg backdrop-blur">
+						<div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+							<RefreshCw className="size-3 animate-spin text-primary" />
+							Loading older history
 						</div>
 					</div>
 				)}
 
-				{isLoadingMoreData && (
-					<div className="absolute top-8 right-8 z-20 bg-blue-500/10 border border-blue-500/30 text-blue-400 px-4 py-2 rounded-lg shadow-lg">
-						<div className="flex items-center space-x-2">
-							<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400" />
-							<span className="text-sm">Loading more data...</span>
-						</div>
+				{historyLimitReached && !isLoadingOlder && (
+					<div
+						className="absolute right-5 top-5 z-20 rounded-full border border-border bg-card/95 px-3 py-1.5 text-[10px] text-muted-foreground shadow-lg backdrop-blur"
+						role="status"
+					>
+						Oldest available data reached
 					</div>
 				)}
-
-				<div
-					ref={chartContainerRef}
-					className="w-full max-w-full border border-border rounded-lg overflow-hidden"
-					style={{ height: `${height}px` }}
-				/>
 			</div>
-		</div>
+		</section>
 	);
 }

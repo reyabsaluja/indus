@@ -1,145 +1,103 @@
-"use client";
-
-import { Activity, BarChart3, Search, TrendingUp } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { ArrowRight, ArrowUpRight, Search, Sparkles } from "lucide-react";
+import Link from "next/link";
 import { FavoritesSection } from "@/components/FavoritesSection";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-// Popular stocks organized by categories
-const POPULAR_STOCKS = [
-	{ symbol: "AAPL", name: "Apple Inc.", category: "Tech" },
-	{ symbol: "MSFT", name: "Microsoft Corporation", category: "Tech" },
-	{ symbol: "GOOGL", name: "Alphabet Inc.", category: "Tech" },
-	{ symbol: "AMZN", name: "Amazon.com Inc.", category: "Tech" },
-	{ symbol: "TSLA", name: "Tesla Inc.", category: "Auto" },
-	{ symbol: "NVDA", name: "NVIDIA Corporation", category: "Tech" },
-	{ symbol: "META", name: "Meta Platforms Inc.", category: "Tech" },
-	{ symbol: "NFLX", name: "Netflix Inc.", category: "Media" },
-];
-
-const TRENDING_STOCKS = [
-	{ symbol: "CRM", name: "Salesforce Inc." },
-	{ symbol: "ORCL", name: "Oracle Corporation" },
-	{ symbol: "AMD", name: "Advanced Micro Devices" },
-	{ symbol: "UBER", name: "Uber Technologies Inc." },
-	{ symbol: "SPOT", name: "Spotify Technology" },
-	{ symbol: "SHOP", name: "Shopify Inc." },
+const RESEARCH_STARTERS = [
+	{ symbol: "AAPL", name: "Apple", lens: "Margins & capital return", group: "Consumer tech" },
+	{ symbol: "MSFT", name: "Microsoft", lens: "Cloud growth & valuation", group: "Enterprise" },
+	{
+		symbol: "NVDA",
+		name: "NVIDIA",
+		lens: "Growth quality & expectations",
+		group: "Semiconductors",
+	},
+	{ symbol: "AMZN", name: "Amazon", lens: "Operating leverage", group: "Commerce" },
+	{ symbol: "GOOGL", name: "Alphabet", lens: "Cash generation & AI spend", group: "Platforms" },
+	{ symbol: "TSLA", name: "Tesla", lens: "Margins & volatility", group: "Mobility" },
 ];
 
 export default function Dashboard() {
-	const router = useRouter();
-
-	const handleStockClick = (symbol: string) => {
-		router.push(`/company/${symbol}`);
-	};
-
 	return (
-		<div className="flex-1 space-y-6 p-6 overflow-x-hidden max-w-full">
-			{/* Header Section */}
-			<div className="space-y-2">
-				<h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-				<p className="text-muted-foreground">
-					Explore popular stocks and get comprehensive financial insights with AI-powered
-					explanations
-				</p>
-			</div>
+		<div className="mx-auto w-full max-w-[1500px] space-y-8 px-4 pb-12 pt-2 sm:px-6 lg:px-8">
+			<section className="relative overflow-hidden rounded-[1.6rem] border border-border/70 bg-card px-5 py-7 shadow-sm sm:px-8 sm:py-9">
+				<div className="pointer-events-none absolute inset-y-0 right-0 hidden w-2/5 bg-[radial-gradient(circle_at_center,color-mix(in_oklab,var(--primary)_13%,transparent),transparent_68%)] md:block" />
+				<div className="relative flex flex-col justify-between gap-7 md:flex-row md:items-end">
+					<div>
+						<p className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
+							Dashboard
+						</p>
+						<h1 className="font-display mt-3 text-balance text-4xl font-medium leading-none tracking-[-0.035em] sm:text-5xl">
+							Company research
+						</h1>
+						<p className="mt-4 max-w-xl text-sm leading-6 text-muted-foreground">
+							Search for a company or continue with one of your favorites.
+						</p>
+					</div>
+					<div className="flex flex-col gap-2 sm:flex-row">
+						<Button asChild className="h-11 rounded-full px-5">
+							<Link href="/search">
+								<Search className="size-4" />
+								Search companies
+							</Link>
+						</Button>
+						<Button variant="outline" asChild className="h-11 rounded-full px-5">
+							<Link href="/company/AAPL">
+								Open example
+								<ArrowUpRight className="size-4" />
+							</Link>
+						</Button>
+					</div>
+				</div>
+			</section>
 
-			{/* Quick Actions */}
-			<div className="grid gap-4 md:grid-cols-2">
-				<Card
-					className="cursor-pointer transition-colors hover:bg-accent/50"
-					onClick={() => router.push("/search")}
-				>
-					<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-						<div className="space-y-1">
-							<CardTitle className="text-xl">Search Any Stock</CardTitle>
-							<CardDescription>
-								Search for any publicly traded company on Yahoo Finance
-							</CardDescription>
-						</div>
-						<Search className="h-8 w-8 text-primary" />
-					</CardHeader>
-				</Card>
-
-				<Card
-					className="cursor-pointer transition-colors hover:bg-accent/50"
-					onClick={() => router.push("/company/AAPL")}
-				>
-					<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-						<div className="space-y-1">
-							<CardTitle className="text-xl">View Sample Analysis</CardTitle>
-							<CardDescription>
-								See a detailed financial analysis of Apple Inc. (AAPL)
-							</CardDescription>
-						</div>
-						<BarChart3 className="h-8 w-8 text-primary" />
-					</CardHeader>
-				</Card>
-			</div>
-
-			{/* Favorites Section */}
 			<FavoritesSection />
 
-			{/* Popular Stocks */}
-			<Card>
-				<CardHeader>
-					<CardTitle className="flex items-center gap-2">
-						<TrendingUp className="h-5 w-5" />
-						Popular Stocks
-					</CardTitle>
-					<CardDescription>Most actively searched stocks across all categories</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-						{POPULAR_STOCKS.map((stock) => (
-							<Button
-								key={stock.symbol}
-								variant="outline"
-								className="h-auto flex-col items-start space-y-2 p-4"
-								onClick={() => handleStockClick(stock.symbol)}
-							>
-								<div className="flex w-full items-center justify-between">
-									<span className="font-semibold">{stock.symbol}</span>
-									<span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
-										{stock.category}
-									</span>
-								</div>
-								<span className="text-left text-sm text-muted-foreground">{stock.name}</span>
-							</Button>
-						))}
+			<section aria-labelledby="starters-heading">
+				<div className="mb-4 flex items-end justify-between gap-4">
+					<div>
+						<div className="flex items-center gap-2 text-primary">
+							<Sparkles className="size-4" />
+							<p className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em]">
+								Research starters
+							</p>
+						</div>
+						<h2 id="starters-heading" className="mt-1 text-xl font-semibold tracking-[-0.025em]">
+							Well-known names, useful questions
+						</h2>
 					</div>
-				</CardContent>
-			</Card>
+					<Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
+						<Link href="/search">
+							Search all
+							<ArrowRight className="size-3.5" />
+						</Link>
+					</Button>
+				</div>
 
-			{/* Trending Stocks */}
-			<Card>
-				<CardHeader>
-					<CardTitle className="flex items-center gap-2">
-						<Activity className="h-5 w-5" />
-						Trending Stocks
-					</CardTitle>
-					<CardDescription>Stocks gaining momentum and investor interest</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-						{TRENDING_STOCKS.map((stock) => (
-							<Button
-								key={stock.symbol}
-								variant="outline"
-								className="h-auto flex-col items-start space-y-2 p-4"
-								onClick={() => handleStockClick(stock.symbol)}
-							>
-								<div className="flex w-full items-center justify-between">
-									<span className="font-semibold">{stock.symbol}</span>
-									<span className="text-muted-foreground">→</span>
+				<div className="grid overflow-hidden rounded-2xl border border-border/70 bg-card sm:grid-cols-2 lg:grid-cols-3">
+					{RESEARCH_STARTERS.map((stock) => (
+						<Link
+							key={stock.symbol}
+							href={`/company/${stock.symbol}`}
+							className="group min-w-0 border-b border-border/70 p-5 transition-colors hover:bg-accent/40 sm:odd:border-r lg:border-r lg:[&:nth-child(3n)]:border-r-0 lg:[&:nth-last-child(-n+3)]:border-b-0"
+						>
+							<div className="flex items-start justify-between gap-4">
+								<div className="min-w-0">
+									<div className="flex items-center gap-2">
+										<span className="font-mono text-sm font-bold tracking-[0.08em]">
+											{stock.symbol}
+										</span>
+										<span className="truncate text-xs text-muted-foreground">{stock.name}</span>
+									</div>
+									<p className="mt-6 text-sm font-medium">{stock.lens}</p>
+									<p className="mt-1 text-xs text-muted-foreground">{stock.group}</p>
 								</div>
-								<span className="text-left text-sm text-muted-foreground">{stock.name}</span>
-							</Button>
-						))}
-					</div>
-				</CardContent>
-			</Card>
+								<ArrowUpRight className="size-4 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-primary" />
+							</div>
+						</Link>
+					))}
+				</div>
+			</section>
 		</div>
 	);
 }

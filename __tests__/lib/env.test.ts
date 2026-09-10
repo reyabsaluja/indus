@@ -48,6 +48,20 @@ describe("envSchema", () => {
 		expect(result.success).toBe(false);
 	});
 
+	it("rejects non-HTTP Supabase URLs and whitespace-only credentials", () => {
+		expect(
+			envSchema.safeParse({
+				...validEnv,
+				NEXT_PUBLIC_SUPABASE_URL: "ftp://example.supabase.co",
+			}).success,
+		).toBe(false);
+		expect(envSchema.safeParse({ ...validEnv, NEXT_PUBLIC_SUPABASE_ANON_KEY: "   " }).success).toBe(
+			false,
+		);
+		expect(envSchema.safeParse({ ...validEnv, ALPACA_API_KEY: "   " }).success).toBe(false);
+		expect(envSchema.safeParse({ ...validEnv, GEMINI_API_KEY: "\t" }).success).toBe(false);
+	});
+
 	it("rejects missing ALPACA_API_KEY", () => {
 		const { ALPACA_API_KEY, ...envWithout } = validEnv;
 		const result = envSchema.safeParse(envWithout);

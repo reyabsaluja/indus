@@ -4,7 +4,19 @@ import { getPublicSupabaseConfig } from "@/lib/supabase/config";
 
 const PROTECTED_ROUTES = ["/dashboard", "/company", "/search", "/crypto", "/reports", "/settings"];
 
+export function shouldBypassMiddleware(pathname: string): boolean {
+	return pathname === "/api/health";
+}
+
+export function isProtectedRoute(pathname: string): boolean {
+	return PROTECTED_ROUTES.some((route) => pathname.startsWith(route));
+}
+
 export async function middleware(request: NextRequest) {
+	if (shouldBypassMiddleware(request.nextUrl.pathname)) {
+		return NextResponse.next({ request });
+	}
+
 	let supabaseResponse = NextResponse.next({
 		request,
 	});
@@ -31,11 +43,7 @@ export async function middleware(request: NextRequest) {
 		data: { user },
 	} = await supabase.auth.getUser();
 
-	const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
-		request.nextUrl.pathname.startsWith(route),
-	);
-
-	if (isProtectedRoute && !user) {
+	if (isProtectedRoute(request.nextUrl.pathname) && !user) {
 		return NextResponse.redirect(new URL("/auth", request.url));
 	}
 

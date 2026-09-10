@@ -1,8 +1,7 @@
 "use client";
 
-import { Copy, RotateCcw } from "lucide-react";
-import type React from "react";
-import { useEffect, useRef } from "react";
+import { Check, Copy, RefreshCw, RotateCcw, Sparkles, UserRound } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { ChatMessage } from "@/lib/types";
 
@@ -18,106 +17,139 @@ interface MessageListProps {
 const SEED_MESSAGE: ChatMessage = {
 	id: "seed",
 	role: "assistant",
-	content:
-		"Hi — I can interpret any metric here (valuation, margins, growth, leverage). Ask a question to begin.",
+	content: "Ask about the company’s valuation, profitability, growth, debt, or price history.",
 	createdAt: 0,
 };
 
-export const MessageList: React.FC<MessageListProps> = ({
+export function MessageList({
 	messages,
 	sending,
 	error,
 	onRegenerateLast,
 	onClearError,
 	hasUserMessages,
-}) => {
-	const messagesEndRef = useRef<HTMLDivElement>(null);
+}: MessageListProps) {
+	const scrollContainerRef = useRef<HTMLDivElement>(null);
+	const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+	const latestContent = messages.at(-1)?.content;
 
 	useEffect(() => {
-		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-	});
+		if (latestContent === undefined && !sending) return;
+		const container = scrollContainerRef.current;
+		if (container) container.scrollTop = container.scrollHeight;
+	}, [latestContent, sending]);
 
-	const copyToClipboard = async (content: string) => {
+	const copyToClipboard = async (message: ChatMessage) => {
 		try {
-			await navigator.clipboard.writeText(content);
-		} catch {}
-	};
-
-	const renderMessage = (message: ChatMessage) => {
-		const isUser = message.role === "user";
-		const isStreaming = message.streaming && !isUser;
-
-		return (
-			<div
-				key={message.id}
-				className={`group relative ${
-					isUser
-						? "bg-emerald-600/25 border border-emerald-500/30 border-l-2 border-l-emerald-500/70 rounded-lg px-3 py-2 text-sm leading-relaxed text-emerald-200 w-fit ml-auto"
-						: "bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-sm leading-relaxed text-zinc-200 w-fit max-w-[52ch]"
-				}`}
-				aria-live={isStreaming ? "polite" : undefined}
-			>
-				<div className="whitespace-pre-wrap tabular-nums">
-					{message.content}
-					{isStreaming && (
-						<span className="inline-block w-2 h-3 bg-zinc-500/60 rounded animate-pulse ml-1 align-baseline"></span>
-					)}
-				</div>
-
-				{/* Copy and Regenerate buttons for assistant messages */}
-				{!isUser && !isStreaming && message.content && (
-					<div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-						<Button
-							variant="ghost"
-							size="sm"
-							onClick={() => copyToClipboard(message.content)}
-							className="h-6 w-6 p-0 text-zinc-500 hover:text-zinc-300"
-							aria-label="Copy answer"
-						>
-							<Copy className="h-3 w-3" />
-						</Button>
-
-						{message.id === messages[messages.length - 1]?.id && (
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={onRegenerateLast}
-								disabled={sending}
-								className="h-6 w-6 p-0 text-zinc-500 hover:text-zinc-300"
-								aria-label="Regenerate answer"
-							>
-								<RotateCcw className="h-3 w-3" />
-							</Button>
-						)}
-					</div>
-				)}
-			</div>
-		);
+			await navigator.clipboard.writeText(message.content);
+			setCopiedMessageId(message.id);
+			window.setTimeout(() => setCopiedMessageId(null), 1600);
+		} catch {
+			setCopiedMessageId(null);
+		}
 	};
 
 	const allMessages = !hasUserMessages && messages.length === 0 ? [SEED_MESSAGE] : messages;
 
 	return (
-		<div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 scrollbar-none">
-			{/* Error display */}
+		<div
+			ref={scrollContainerRef}
+			className="scrollbar-none flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-5"
+			aria-live="polite"
+		>
 			{error && (
-				<div className="flex items-center justify-between px-3 py-2 bg-red-900/20 border border-red-800/40 rounded-lg">
-					<span className="text-xs text-red-400">error</span>
-					<Button
-						variant="ghost"
-						size="sm"
-						onClick={onClearError}
-						className="h-4 w-4 p-0 text-red-400 hover:text-red-300"
-					>
-						×
-					</Button>
+				<div
+					className="rounded-xl border border-destructive/25 bg-destructive/[0.07] p-3"
+					role="alert"
+				>
+					<div className="flex items-start justify-between gap-3">
+						<div>
+							<p className="text-xs font-semibold text-destructive">The analyst hit a problem</p>
+							<p className="mt-1 text-xs leading-5 text-muted-foreground">{error}</p>
+						</div>
+						<Button
+							variant="ghost"
+							size="icon"
+							onClick={onClearError}
+							className="size-6 shrink-0 rounded-full"
+							aria-label="Dismiss analyst error"
+						>
+							<span aria-hidden="true">×</span>
+						</Button>
+					</div>
+					{hasUserMessages && !sending && (
+						<button
+							type="button"
+							onClick={onRegenerateLast}
+							className="mt-3 inline-flex items-center gap-1.5 text-[10px] font-semibold text-destructive hover:underline"
+						>
+							<RefreshCw className="size-3" />
+							Try the last question again
+						</button>
+					)}
 				</div>
 			)}
 
-			{/* Messages */}
-			{allMessages.map(renderMessage)}
+			{allMessages.map((message) => {
+				const isUser = message.role === "user";
+				const isStreaming = Boolean(message.streaming && !isUser);
+				const isLastAssistant = !isUser && message.id === messages.at(-1)?.id;
 
-			<div ref={messagesEndRef} />
+				return (
+					<div
+						key={message.id}
+						className={`group flex items-start gap-2.5 ${isUser ? "flex-row-reverse" : ""}`}
+					>
+						<span
+							className={`flex size-7 shrink-0 items-center justify-center rounded-full ${isUser ? "bg-foreground text-background" : "bg-primary/12 text-primary"}`}
+						>
+							{isUser ? <UserRound className="size-3.5" /> : <Sparkles className="size-3.5" />}
+						</span>
+						<div
+							className={`relative max-w-[85%] rounded-2xl px-3.5 py-3 text-sm leading-6 ${isUser ? "rounded-tr-sm bg-foreground text-background" : "rounded-tl-sm border border-border/70 bg-background/65 text-foreground"}`}
+						>
+							<p className="whitespace-pre-wrap tabular-nums">
+								{message.content}
+								{isStreaming && (
+									<span className="ml-1 inline-block h-3.5 w-1.5 animate-pulse rounded-sm bg-primary align-baseline" />
+								)}
+							</p>
+
+							{!isUser && !isStreaming && message.content && message.id !== "seed" && (
+								<div className="mt-2 flex items-center gap-1 border-t border-border/50 pt-2">
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={() => void copyToClipboard(message)}
+										className="h-7 rounded-full px-2 text-[9px] text-muted-foreground"
+										aria-label="Copy answer"
+									>
+										{copiedMessageId === message.id ? (
+											<Check className="size-3" />
+										) : (
+											<Copy className="size-3" />
+										)}
+										{copiedMessageId === message.id ? "Copied" : "Copy"}
+									</Button>
+									{isLastAssistant && (
+										<Button
+											variant="ghost"
+											size="sm"
+											onClick={onRegenerateLast}
+											disabled={sending}
+											className="h-7 rounded-full px-2 text-[9px] text-muted-foreground"
+											aria-label="Regenerate answer"
+										>
+											<RotateCcw className="size-3" />
+											Regenerate
+										</Button>
+									)}
+								</div>
+							)}
+						</div>
+					</div>
+				);
+			})}
 		</div>
 	);
-};
+}

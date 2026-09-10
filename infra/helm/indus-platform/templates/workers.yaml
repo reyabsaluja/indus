@@ -1,0 +1,91 @@
+{{- $workers := list
+  (dict "name" "platform-outbox" "serviceAccount" "platform-outbox" "command" "./bin/outbox-publisher" "secret" "platform-api-runtime" "provider" "platform-api" "replicas" .Values.platformOutbox.replicas "resources" .Values.platformOutbox.resources)
+  (dict "name" "reports-consumer" "serviceAccount" "reports-consumer" "command" "./bin/reports-consumer" "secret" "platform-api-runtime" "provider" "platform-api" "replicas" .Values.reportsConsumer.replicas "resources" .Values.reportsConsumer.resources)
+  (dict "name" "research-worker" "serviceAccount" "research-worker" "command" "./bin/research-worker" "secret" "research-worker-runtime" "provider" "research-worker" "replicas" .Values.researchWorker.replicas "resources" .Values.researchWorker.resources)
+-}}
+{{- range $worker := $workers }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $worker.name }}
+  labels:
+    {{- include "indus.labels" $ | nindent 4 }}
+    app.kubernetes.io/name: {{ $worker.name }}
+spec:
+  replicas: {{ $worker.replicas }}
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 1, maxSurge: 1 }
+  selector:
+    matchLabels:
+      {{- include "indus.selectorLabels" (dict "root" $ "name" $worker.name) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "indus.selectorLabels" (dict "root" $ "name" $worker.name) | nindent 8 }}
+        {{- include "indus.labels" $ | nindent 8 }}
+      annotations:
+        checksum/config: {{ toJson $.Values.config | sha256sum }}
+    spec:
+      serviceAccountName: {{ $worker.serviceAccount }}
+      terminationGracePeriodSeconds: 90
+      securityContext:
+        {{- include "indus.podSecurityContext" $ | nindent 8 }}
+      topologySpreadConstraints:
+        {{- include "indus.spread" (dict "root" $ "name" $worker.name) | nindent 8 }}
+      containers:
+        - name: {{ $worker.name }}
+          image: {{ $.Values.images.platformApi | quote }}
+          imagePullPolicy: IfNotPresent
+          command: [{{ $worker.command | quote }}]
+          envFrom:
+            - secretRef: { name: {{ $worker.secret }} }
+          env:
+            - { name: AUTH_PROVIDER, value: "cognito" }
+            - { name: COGNITO_JWT_ISSUER, value: {{ $.Values.identity.issuer | quote }} }
+            - { name: COGNITO_CLIENT_ID, value: {{ $.Values.identity.audience | quote }} }
+            - { name: KAFKA_BROKERS, value: {{ $.Values.config.mskBootstrapBrokers | quote }} }
+            - { name: KAFKA_AUTH_MODE, value: "msk_iam" }
+            - { name: KAFKA_SECURITY_PROTOCOL, value: "SASL_SSL" }
+            - { name: KAFKA_SASL_MECHANISM, value: "AWS_MSK_IAM" }
+            - { name: TEMPORAL_ADDRESS, value: {{ $.Values.config.temporalAddress | quote }} }
+            - { name: TEMPORAL_NAMESPACE, value: {{ $.Values.config.temporalNamespace | quote }} }
+            - { name: REPORT_ARTIFACT_BUCKET, value: {{ $.Values.config.artifactBucket | quote }} }
+            - { name: AWS_REGION, value: {{ $.Values.aws.region | quote }} }
+            - { name: OTEL_SERVICE_NAME, value: {{ $worker.name | quote }} }
+            - { name: OTEL_TRACES_EXPORTER, value: "otlp" }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otel-collector.observability.svc.cluster.local:4318" }
+          resources:
+            {{- toYaml $worker.resources | nindent 12 }}
+          securityContext:
+            {{- include "indus.containerSecurityContext" $ | nindent 12 }}
+          livenessProbe:
+            exec: { command: ["/bin/sh", "-c", "kill -0 1"] }
+            periodSeconds: 20
+            timeoutSeconds: 3
+          volumeMounts:
+            - { name: runtime-secret, mountPath: /mnt/secrets-store, readOnly: true }
+            - { name: tmp, mountPath: /rails/tmp }
+            - { name: log, mountPath: /rails/log }
+      volumes:
+        - name: runtime-secret
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes: { secretProviderClass: {{ $worker.provider }} }
+        - name: tmp
+          emptyDir: { sizeLimit: 1Gi }
+        - name: log
+          emptyDir: { sizeLimit: 1Gi }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: {{ $worker.name }} }
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "indus.selectorLabels" (dict "root" $ "name" $worker.name) | nindent 6 }}
+{{- end }}

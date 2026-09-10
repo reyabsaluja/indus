@@ -1,0 +1,152 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: database-migrate-{{ sha256sum .Values.images.platformApi | trunc 10 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+  labels:
+    {{- include "indus.labels" . | nindent 4 }}
+    app.kubernetes.io/name: database-migrate
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        {{- include "indus.selectorLabels" (dict "root" . "name" "database-migrate") | nindent 8 }}
+        {{- include "indus.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: database-migrator
+      securityContext:
+        {{- include "indus.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: migrate
+          image: {{ .Values.images.platformApi | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["./bin/rails", "db:migrate"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: database-migration-runtime, key: DATABASE_URL }
+            - { name: PGOPTIONS, value: "-c role=indus_platform_owner -c search_path=public,pg_catalog" }
+            - { name: SECRET_KEY_BASE_DUMMY, value: "1" }
+            - { name: AWS_REGION, value: {{ .Values.aws.region | quote }} }
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { cpu: "1", memory: 1Gi }
+          securityContext:
+            {{- include "indus.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - { name: runtime-secret, mountPath: /mnt/secrets-store, readOnly: true }
+            - { name: tmp, mountPath: /rails/tmp }
+            - { name: log, mountPath: /rails/log }
+      volumes:
+        - name: runtime-secret
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes: { secretProviderClass: database-migration }
+        - name: tmp
+          emptyDir: { sizeLimit: 1Gi }
+        - name: log
+          emptyDir: { sizeLimit: 1Gi }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: market-database-migrate-{{ sha256sum .Values.images.marketData | trunc 10 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+  labels:
+    {{- include "indus.labels" . | nindent 4 }}
+    app.kubernetes.io/name: market-database-migrate
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        {{- include "indus.selectorLabels" (dict "root" . "name" "market-database-migrate") | nindent 8 }}
+        {{- include "indus.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: database-migrator
+      securityContext:
+        {{- include "indus.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: migrate
+          image: {{ .Values.images.marketData | quote }}
+          imagePullPolicy: IfNotPresent
+          args: ["migrate"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: database-migration-runtime, key: DATABASE_URL }
+            - { name: PGOPTIONS, value: "-c role=indus_market_owner -c search_path=market_data,pg_catalog" }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          securityContext:
+            {{- include "indus.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - { name: runtime-secret, mountPath: /mnt/secrets-store, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: runtime-secret
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes: { secretProviderClass: database-migration }
+        - name: tmp
+          emptyDir: { sizeLimit: 256Mi }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: web-publish-{{ .Values.webPublisher.releaseId | trunc 12 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    {{- include "indus.labels" . | nindent 4 }}
+    app.kubernetes.io/name: web-publisher
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        {{- include "indus.selectorLabels" (dict "root" . "name" "web-publisher") | nindent 8 }}
+        {{- include "indus.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: web-publisher
+      securityContext:
+        {{- include "indus.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: publish
+          image: {{ .Values.images.web | quote }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: AWS_REGION, value: {{ .Values.aws.region | quote }} }
+            - { name: AWS_CONFIG_FILE, value: /tmp/aws-config }
+            - { name: AWS_SHARED_CREDENTIALS_FILE, value: /tmp/aws-credentials }
+            - { name: WEB_BUCKET, value: {{ .Values.aws.webBucket | quote }} }
+            - { name: WEB_RELEASE_ID, value: {{ .Values.webPublisher.releaseId | quote }} }
+            - { name: CLOUDFRONT_DISTRIBUTION_ID, value: {{ .Values.aws.cloudfrontDistributionId | quote }} }
+            - { name: PUBLISH_APPLY, value: "true" }
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            {{- include "indus.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 256Mi }

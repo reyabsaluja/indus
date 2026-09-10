@@ -1,0 +1,11 @@
+shared_account_id = "111111111111"
+environment_account_ids = {
+  development = "222222222222"
+  staging     = "333333333333"
+  production  = "444444444444"
+}
+
+tags = {
+  CostCenter = "engineering"
+  Owner      = "platform"
+}

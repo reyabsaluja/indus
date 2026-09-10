@@ -8,7 +8,6 @@ import CryptoChart from "@/components/CryptoChart";
 import CryptoFinancialTable from "@/components/CryptoFinancialTable";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { batchPreload } from "@/hooks/useExplanation";
 import type { CryptoData } from "@/lib/types";
 
 const CryptoPage: React.FC = () => {
@@ -35,81 +34,6 @@ const CryptoPage: React.FC = () => {
 			}
 
 			setCryptoData(result.data);
-
-			// Prepare items for batch preload of AI explanations with actual values
-			const data = result.data;
-			const items = [
-				{
-					symbol: cryptoSymbol.toUpperCase(),
-					metric: "market_cap",
-					value: data.marketCap || 0,
-				},
-				{
-					symbol: cryptoSymbol.toUpperCase(),
-					metric: "total_supply",
-					value: data.totalSupply || 0,
-				},
-				{
-					symbol: cryptoSymbol.toUpperCase(),
-					metric: "circulating_supply",
-					value: data.circulatingSupply || 0,
-				},
-				{
-					symbol: cryptoSymbol.toUpperCase(),
-					metric: "max_supply",
-					value: data.maxSupply || 0,
-				},
-				{
-					symbol: cryptoSymbol.toUpperCase(),
-					metric: "volume_24h",
-					value: data.volume || 0,
-				},
-				{
-					symbol: cryptoSymbol.toUpperCase(),
-					metric: "percent_change_24h",
-					value: data.percentChange24h || 0,
-				},
-				{
-					symbol: cryptoSymbol.toUpperCase(),
-					metric: "percent_change_7d",
-					value: data.percentChange7d || 0,
-				},
-				{
-					symbol: cryptoSymbol.toUpperCase(),
-					metric: "percent_change_30d",
-					value: data.percentChange30d || 0,
-				},
-				{
-					symbol: cryptoSymbol.toUpperCase(),
-					metric: "all_time_high",
-					value: data.allTimeHigh || 0,
-				},
-				{
-					symbol: cryptoSymbol.toUpperCase(),
-					metric: "all_time_low",
-					value: data.allTimeLow || 0,
-				},
-				{
-					symbol: cryptoSymbol.toUpperCase(),
-					metric: "dominance",
-					value: data.dominance || 0,
-				},
-				{
-					symbol: cryptoSymbol.toUpperCase(),
-					metric: "volatility",
-					value: data.volatility || 0,
-				},
-				{
-					symbol: cryptoSymbol.toUpperCase(),
-					metric: "liquidity_score",
-					value: data.liquidityScore || 0,
-				},
-			].filter((item) => item.value !== 0);
-
-			// Preload AI explanations for all metrics with actual values
-			if (items.length > 0) {
-				batchPreload(items);
-			}
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "An error occurred");
 		} finally {
@@ -340,10 +264,7 @@ const CryptoPage: React.FC = () => {
 					<Card>
 						<CardHeader>
 							<CardTitle>Crypto Metrics</CardTitle>
-							<CardDescription>
-								Comprehensive cryptocurrency analysis with AI-powered explanations. Hover over any
-								metric for detailed insights.
-							</CardDescription>
+							<CardDescription>Hover over a metric for an explanation.</CardDescription>
 						</CardHeader>
 						<CardContent>
 							<CryptoFinancialTable data={cryptoData} />

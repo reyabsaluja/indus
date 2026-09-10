@@ -1,8 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-	serverExternalPackages: ["yahoo-finance2"],
-	// Disable image optimization for Vercel deployment unless you have a pro plan
+	output: "standalone",
+	serverExternalPackages: ["@alpacahq/alpaca-trade-api", "yahoo-finance2"],
+	// The application serves images directly; the current image configuration is provider-neutral.
 	images: {
 		unoptimized: true,
 	},

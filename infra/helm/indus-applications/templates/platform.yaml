@@ -1,0 +1,42 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: indus-platform
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: indus
+  sources:
+    - repoURL: {{ .Values.repository | quote }}
+      targetRevision: {{ .Values.revision | quote }}
+      path: infra/helm/indus-platform
+      helm:
+        releaseName: indus
+        valueFiles:
+          - $values/infra/gitops/environments/{{ .Values.environment }}/values.yaml
+    - repoURL: {{ .Values.repository | quote }}
+      targetRevision: {{ .Values.revision | quote }}
+      ref: values
+  destination: { server: "https://kubernetes.default.svc", namespace: indus }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true, allowEmpty: false }
+    syncOptions: [CreateNamespace=false, PruneLast=true, RespectIgnoreDifferences=true, ServerSideApply=true]
+    retry: { limit: 3, backoff: { duration: 10s, factor: 2, maxDuration: 3m } }
+  revisionHistoryLimit: 10
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: indus-policies
+  namespace: argocd
+spec:
+  project: indus
+  source:
+    repoURL: {{ .Values.repository | quote }}
+    targetRevision: {{ .Values.revision | quote }}
+    path: infra/gitops/policies
+    directory: { recurse: true }
+  destination: { server: "https://kubernetes.default.svc", namespace: "" }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true, allowEmpty: false }
+    syncOptions: [ServerSideApply=true]

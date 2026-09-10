@@ -1,0 +1,6 @@
+apiVersion: v2
+name: indus-applications
+description: Argo CD app-of-apps for one isolated Indus environment
+type: application
+version: 0.1.0
+appVersion: "phase-4"
