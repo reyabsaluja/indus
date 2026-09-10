@@ -81,7 +81,7 @@ Tests should verify externally meaningful behavior instead of implementation det
 
 Provider-facing changes must preserve the runtime policies in [`RELIABILITY.md`](./RELIABILITY.md). Tests should cover timeout behavior, retry classification, stale-cache behavior, fallback selection, and partial upstream responses when those boundaries change.
 
-Migration characterization tests use the `@characterization` tag alongside their normal verification layer. They preserve externally visible authentication, validation, error-envelope, and transport behavior that replacement Rails, React, or Rust services must match intentionally. Change a characterized contract only with an explicit migration decision and corresponding consumer updates.
+Characterization tests use the `@characterization` tag alongside their normal verification layer. They preserve externally visible authentication, validation, error-envelope, and transport behavior. Change a characterized contract only with an explicit compatibility decision and corresponding consumer updates.
 
 Run the full sequence with:
 
@@ -91,7 +91,7 @@ bun run test:local
 
 ## Pull request verification
 
-GitHub Actions runs the same locked Bun toolchain used locally. The core job installs from `bun.lock`, runs Biome, type-checking, unit coverage, the production build, and a production dependency audit with non-secret test configuration. Separate jobs replay every migration and database security assertion against an isolated PostgreSQL container, exercise public HTTP contracts, verify public and authenticated accessibility, run the product in Chromium, Firefox, WebKit, and mobile Chromium, and enforce production-mode performance budgets. They never receive deployed Supabase, Alpaca, Gemini, Vercel, or AWS credentials.
+GitHub Actions uses locked toolchains and non-secret test configuration. It verifies application source, contracts, migrations, database security assertions, HTTP behavior, browser and authenticated accessibility journeys, performance budgets, Terraform, Helm, and container images. Workflows never receive deployed provider or AWS credentials.
 
 The stable `Required verification` job aggregates the required layers as they are introduced. Configure branch protection against that job only after its first successful run on GitHub, so the repository never depends on a check name that has not been registered.
 

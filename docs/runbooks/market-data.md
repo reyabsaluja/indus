@@ -20,7 +20,7 @@ curl --fail http://127.0.0.1:18081/health/ready
 curl --fail http://127.0.0.1:18081/metrics
 ```
 
-Start the replacement application profile as well to exercise its fetch-based stream client:
+Start the application profile as well to exercise its fetch-based stream client:
 
 ```bash
 docker compose --profile application --profile distributed up --build
@@ -59,7 +59,7 @@ Never log or paste tokens, Alpaca credentials, raw provider payloads, or MSK OAu
 
 `market_data.apply_retention` is invoked daily. Archive required raw history before reducing `MARKET_RETENTION_DAYS`. Do not manually delete consumer identities ahead of retained data.
 
-Before production cutover, rollback means stopping the dormant service and replacement routing; the current Next.js stream remains authoritative. After cutover, route `/stream/*` back to the legacy origin, stop new ingestion, allow the writer to drain committed Kafka records, and preserve market-data tables and offsets for reconciliation. Do not drop partitions or topics during the rollback window.
+For a stream incident, stop new ingestion, route traffic to the last known-good service image, allow the writer to drain committed Kafka records, and preserve market-data tables and offsets for reconciliation. Do not drop partitions or topics during the rollback window.
 
 Stop local services without deleting their volumes:
 

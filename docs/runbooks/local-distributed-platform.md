@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This stack exercises the replacement Rails, React, market-data, Kafka, Temporal, and object-storage boundaries without production credentials. `compose.yaml` owns the base application and market-data services. `compose.workflows.yaml` is a modular overlay for the report workflow processes.
+This stack exercises Rails, React, market-data, Kafka, Temporal, and object-storage boundaries without production credentials. `compose.yaml` owns the base application and market-data services. `compose.workflows.yaml` is a modular overlay for the report workflow processes.
 
 ## Start
 
@@ -37,7 +37,7 @@ Authentication fails closed until disposable Supabase issuer configuration is su
 
 ## Verification
 
-The aggregate check runs the Phase 2 baseline, Rust verification, migration transformation tests, starts the distributed stack, and restarts Kafka, Temporal, and MinIO while checking durable data:
+The aggregate check runs application verification, Rust verification, migration transformation tests, starts the distributed stack, and restarts Kafka, Temporal, and MinIO while checking durable data:
 
 ```sh
 bun run test:phase3
