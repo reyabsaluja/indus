@@ -30,8 +30,8 @@ export const metadata: Metadata = {
 	description:
 		"Research public companies with live market charts, durable financial context, and AI analytics that work from the data in view.",
 	icons: {
-		icon: [{ url: "/indus-water.svg", type: "image/svg+xml" }],
-		shortcut: "/indus-water.svg",
+		icon: [{ url: "/logo.svg", type: "image/svg+xml" }],
+		shortcut: "/logo.svg",
 		apple: "/logo.png",
 	},
 	openGraph: {

@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 export function BrandMark({ className }: { className?: string }) {
 	return (
 		<Image
-			src="/indus-water.svg"
+			src="/logo.svg"
 			alt=""
 			width={28}
 			height={28}

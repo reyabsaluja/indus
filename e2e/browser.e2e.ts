@@ -19,9 +19,9 @@ test("@browser landing page exposes the primary product path", async ({ page }) 
 		page.getByText("Charts, fundamentals, and AI analysis", { exact: true }),
 	).toHaveCount(0);
 	await expect(
-		page.getByRole("link", { name: "Indus home" }).first().locator('img[src*="indus-water"]'),
+		page.getByRole("link", { name: "Indus home" }).first().locator('img[src*="logo.svg"]'),
 	).toBeVisible();
-	await expect(page.locator('link[rel="icon"][href*="indus-water.svg"]')).toHaveCount(1);
+	await expect(page.locator('link[rel="icon"][href*="logo.svg"]')).toHaveCount(1);
 });
 
 test("@browser landing navigation scrolls between sections and returns to the top", async ({
@@ -75,7 +75,7 @@ test("@browser authentication mode can be changed without a reload", async ({ pa
 		page.getByText("Charts, fundamentals, and AI analysis", { exact: true }),
 	).toHaveCount(0);
 	await expect(
-		page.getByRole("link", { name: "Indus home" }).first().locator('img[src*="indus-water"]'),
+		page.getByRole("link", { name: "Indus home" }).first().locator('img[src*="logo.svg"]'),
 	).toBeVisible();
 	await page.getByRole("button", { name: "Don't have an account? Sign up" }).click();
 	await expect(page.getByRole("heading", { name: "Start your research." })).toBeVisible();
