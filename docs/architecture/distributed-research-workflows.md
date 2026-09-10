@@ -41,4 +41,4 @@ Artifacts are written through `Reports::ArtifactStore`. Local development uses M
 - Object storage unavailable: the artifact activity retries without marking the report complete.
 - Process crash: Temporal history, outbox rows, event receipts, and activity leases recover work without relying on process memory.
 
-The legacy Next.js and Supabase runtime remains independent of these dormant services until the Phase 4 cutover.
+The web application, Rails API, market-data service, and workflow workers communicate only through their documented HTTP, event, and storage boundaries.

@@ -48,4 +48,4 @@ Prefer restarting the reports consumer and allowing its committed group offset t
 - Object storage: restore bucket access and rerun the failed activity through Temporal. Do not mark the report complete without the stable object key.
 - Model provider: verify bounded credentials and quota, then allow the workflow retry policy to proceed. Never paste private prompts or provider payloads into incident logs.
 
-Rollback before production cutover is to stop the distributed Rails processes. After cutover, follow the traffic rollback and reconciliation gates; database migrations and user writes require forward-only repair.
+Rollback uses the traffic and reconciliation controls in the deployment runbook; database migrations and user writes require forward-only repair.
